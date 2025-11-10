@@ -1,38 +1,285 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
   min-height: 100vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  padding: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Fundo com brilho reduzido */
+.App::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('../public/confederal.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  filter: brightness(0.7);
+  z-index: 0;
+}
+
+/* Conteúdo da página acima do fundo */
+.App > * {
+  position: relative;
+  z-index: 1;
+}
+
+.card {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  max-width: 48rem;
+  width: 100%;
+  border: 2px solid #2563eb;
+  position: relative;
+  z-index: 1;
+  
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 1.875rem;
+  font-weight: bold;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.header p {
+  color: #6b7280;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.column-header {
+  background: #2563eb;
   color: white;
+  text-align: center;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s;
 }
 
-.App-link {
-  color: #61dafb;
+.column-header.complete {
+  background: #22c55e;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.column-header h2 {
+  font-size: 1.25rem;
+  font-weight: bold;
+  margin: 0;
+  flex: 1;
+}
+
+.section-progress {
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-weight: bold;
+}
+
+.items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.check-button {
+  width: 100%;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  border: 2px solid #d1d5db;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.check-button:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.check-button.checked {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.check-button span {
+  font-size: 1rem;
+  font-weight: bold;
+  color: #374151;
+}
+
+.check-button.checked span {
+  color: #15803d;
+}
+
+.check-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.check-button.checked .check-icon {
+  background: #22c55e;
+  border-color: #22c55e;
+}
+
+.check-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: white;
+  stroke-width: 3;
+}
+
+.status-section {
+  border-top: 2px solid #e5e7eb;
+  padding-top: 1.5rem;
+}
+
+.status-box {
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.status-success {
+  background: #dcfce7;
+  border: 2px solid #22c55e;
+}
+
+.status-success p {
+  color: #15803d;
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.status-warning {
+  background: #fef3c7;
+  border: 2px solid #fbbf24;
+}
+
+.status-warning p {
+  color: #92400e;
+  text-align: center;
+  font-weight: 600;
+  margin: 0;
+}
+
+.reset-button {
+  width: 100%;
+  background: #4b5563;
+  color: white;
+  font-weight: bold;
+  padding: 1rem 1.5rem;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1.125rem;
+}
+
+.reset-button:hover {
+  background: #374151;
+}
+
+.timestamp {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.timestamp p {
+  margin: 0.25rem 0;
+}
+
+/* Responsivo para tablets */
+@media (max-width: 768px) {
+  .grid-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
-  to {
-    transform: rotate(360deg);
+  
+  .card {
+    padding: 1.5rem;
+  }
+  
+  .header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Responsivo para mobile */
+@media (max-width: 480px) {
+  .App {
+    padding: 0.5rem;
+  }
+  
+  .card {
+    padding: 1rem;
+  }
+  
+  .header h1 {
+    font-size: 1.25rem;
+  }
+  
+  .column-header h2 {
+    font-size: 1rem;
+  }
+  
+  .check-button span {
+    font-size: 0.875rem;
   }
 }
