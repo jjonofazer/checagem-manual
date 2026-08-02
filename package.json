@@ -11,8 +11,10 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
+  "proxy": "http://localhost:4001",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",

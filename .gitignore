@@ -4,6 +4,10 @@
 /node_modules
 /.pnp
 .pnp.js
+server/node_modules
+
+# banco de dados local (contem usuarios/registros reais)
+server/data/
 
 # testing
 /coverage
@@ -13,6 +17,7 @@
 
 # misc
 .DS_Store
+.env
 .env.local
 .env.development.local
 .env.test.local

@@ -1,202 +1,296 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ChevronRight, LogOut, Users, KeyRound, ListTree, ClipboardList } from 'lucide-react';
 import './App.css';
+import Login from './Login';
+import AdminUsers from './AdminUsers';
+import ChangePassword from './ChangePassword';
+import AdminSections from './AdminSections';
+import SectionModal from './SectionModal';
+import ItemInstructions from './ItemInstructions';
+import ObsModal from './ObsModal';
+import Report from './Report';
+import AdminDashboard from './AdminDashboard';
+import Footer from './Footer';
+import {
+  getToken,
+  setToken,
+  getCurrentUser,
+  logout,
+  getSections,
+  getRegistros,
+  createRegistro,
+  deleteRegistro,
+  resetRegistros
+} from './api';
+
+const getCurrentDate = () => new Date().toISOString().split('T')[0];
 
 function App() {
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [sections, setSections] = useState([]);
+  const [sectionsLoading, setSectionsLoading] = useState(true);
   const [checkedItems, setCheckedItems] = useState({});
-  const [lastCheckDate, setLastCheckDate] = useState('');
+  const [activeSection, setActiveSection] = useState(null);
+  const [instructionsFor, setInstructionsFor] = useState(null);
+  const [obsFor, setObsFor] = useState(null);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showAdminSections, setShowAdminSections] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
-  const sections = [
-    {
-      id: 'hbase',
-      title: 'HBASE',
-      items: [
-        { id: 'hbase-backup', label: 'BACKUP' },
-        { id: 'hbase-tv', label: 'TV CARDAPIO' },
-        { id: 'hbase-camera', label: 'CAMERA' }
-      ]
-    },
-    {
-      id: 'hrsm',
-      title: 'HRSM',
-      items: [
-        { id: 'hrsm-backup', label: 'BACKUP' },
-        { id: 'hrsm-tv', label: 'TV CARDAPIO' },
-        { id: 'hrsm-camera', label: 'CAMERA' }
-      ]
-    },
-    {
-      id: 'recepcao',
-      title: 'RECEPÇÃO',
-      items: [
-        { id: 'recepcao-ativo', label: 'SISTEMA ATIVO' }
-      ]
-    },
-    {
-      id: 'eco',
-      title: 'ECO HOSPITALAR',
-      items: [
-        { id: 'eco-ativo', label: 'SISTEMA ATIVO' }
-      ]
-    }
-  ];
+  const allItems = sections.flatMap((section) => section.items);
 
-  const allItems = sections.flatMap(section => section.items);
+  const today = getCurrentDate();
 
-  // Função para obter a data atual no formato YYYY-MM-DD
-  const getCurrentDate = () => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  };
-
-  // Carregar dados salvos ao iniciar
+  // Valida sessão salva ao carregar a página
   useEffect(() => {
-    const savedData = localStorage.getItem('checagemManual');
-    if (savedData) {
-      const { date, items } = JSON.parse(savedData);
-      const today = getCurrentDate();
-      
-      // Se a data salva for diferente de hoje, reseta a checagem
-      if (date === today) {
-        setCheckedItems(items);
-        setLastCheckDate(date);
-      } else {
-        // Novo dia, reseta tudo
-        setCheckedItems({});
-        setLastCheckDate('');
-        localStorage.removeItem('checagemManual');
-      }
+    const token = getToken();
+    if (!token) {
+      setAuthLoading(false);
+      return;
     }
+    getCurrentUser()
+      .then(({ user }) => setCurrentUser(user))
+      .catch(() => setToken(null))
+      .finally(() => setAuthLoading(false));
   }, []);
 
-  // Salvar dados sempre que houver mudança
+  const loadSections = useCallback(() => {
+    return getSections()
+      .then(({ sections }) => setSections(sections))
+      .catch((err) => setLoadError(err.message));
+  }, []);
+
+  const loadRegistros = useCallback(() => {
+    return getRegistros(today)
+      .then(({ registros }) => {
+        const mapped = {};
+        registros.forEach((r) => {
+          mapped[r.item_id] = { name: r.user_name, username: r.username, status: r.status, obs: r.obs };
+        });
+        setCheckedItems(mapped);
+      })
+      .catch((err) => setLoadError(err.message));
+  }, [today]);
+
+  // Busca topicos e registros de hoje assim que o usuário loga
   useEffect(() => {
-    if (Object.keys(checkedItems).length > 0) {
-      const dataToSave = {
-        date: getCurrentDate(),
-        items: checkedItems
-      };
-      localStorage.setItem('checagemManual', JSON.stringify(dataToSave));
-      setLastCheckDate(getCurrentDate());
+    if (currentUser) {
+      setSectionsLoading(true);
+      Promise.all([loadSections(), loadRegistros()]).finally(() => setSectionsLoading(false));
     }
-  }, [checkedItems]);
+  }, [currentUser, loadSections, loadRegistros]);
 
-  const toggleCheck = (id) => {
-    setCheckedItems(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
   };
 
-  const allChecked = allItems.every(item => checkedItems[item.id]);
-  const checkedCount = allItems.filter(item => checkedItems[item.id]).length;
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // sessão já pode estar expirada no servidor; segue com o logout local
+    }
+    setToken(null);
+    setCurrentUser(null);
+    setSections([]);
+    setSectionsLoading(true);
+    setCheckedItems({});
+    setActiveSection(null);
+  };
 
-  // Verificar quantos itens cada seção tem checados
+  const setItemStatus = async (item, status, obs) => {
+    setLoadError('');
+    try {
+      const { registro } = await createRegistro({ itemId: item.id, date: today, status, obs });
+      setCheckedItems((prev) => ({
+        ...prev,
+        [item.id]: { name: registro.user_name, username: registro.username, status: registro.status, obs: registro.obs }
+      }));
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  };
+
+  const removeRegistro = async (section, item) => {
+    setLoadError('');
+    try {
+      await deleteRegistro(item.id, today);
+      setCheckedItems((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    } catch (err) {
+      setLoadError(err.message);
+    }
+  };
+
+  const setOnline = (section, item) => setItemStatus(item, 'online', null);
+
+  const openInstructions = (section, item) => {
+    setInstructionsFor({ section, item });
+  };
+
+  const confirmInstructions = async () => {
+    if (!instructionsFor) return;
+    await setItemStatus(instructionsFor.item, 'online', null);
+    setInstructionsFor(null);
+  };
+
+  const requestOffline = (section, item) => {
+    setObsFor({ section, item });
+  };
+
+  const confirmOffline = async (obs) => {
+    if (!obsFor) return;
+    await setItemStatus(obsFor.item, 'offline', obs);
+    setObsFor(null);
+  };
+
+  const allChecked = allItems.every((item) => checkedItems[item.id]);
+  const checkedCount = allItems.filter((item) => checkedItems[item.id]).length;
+
   const getSectionProgress = (section) => {
-    const checkedInSection = section.items.filter(item => checkedItems[item.id]).length;
-    const totalInSection = section.items.length;
-    return { checked: checkedInSection, total: totalInSection };
+    const checked = section.items.filter((item) => checkedItems[item.id]).length;
+    return { checked, total: section.items.length };
   };
 
-  const handleReset = () => {
-    if (window.confirm('Tem certeza que deseja resetar a checagem de hoje?')) {
+  const handleReset = async () => {
+    if (!window.confirm('Tem certeza que deseja resetar a checagem de hoje?')) return;
+    try {
+      await resetRegistros(today);
       setCheckedItems({});
-      setLastCheckDate('');
-      localStorage.removeItem('checagemManual');
+    } catch (err) {
+      setLoadError(err.message);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="App">
+        <div className="card">
+          <div className="header">
+            <h1>CHECAGEM MANUAL</h1>
+            <p>Carregando...</p>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <Login onLogin={handleLoginSuccess} />;
+  }
+
+  const isAdmin = currentUser.role === 'admin';
 
   return (
     <div className="App">
       <div className="card">
         {/* Cabeçalho */}
         <div className="header">
-          <h1>CHECAGEM MANUAL</h1>
-          <p>Confirme cada item verificado</p>
-          {lastCheckDate && (
-            <p style={{ fontSize: '0.875rem', color: '#059669', marginTop: '0.5rem' }}>
-              ✓ Última checagem: {new Date(lastCheckDate + 'T00:00:00').toLocaleDateString('pt-BR')}
-            </p>
-          )}
-        </div>
-
-        {/* Grid de Seções */}
-        <div className="grid-container">
-          {sections.map((section) => {
-            const progress = getSectionProgress(section);
-            const sectionComplete = progress.checked === progress.total;
-            
-            return (
-              <div key={section.id} className="column">
-                {/* Título da Seção */}
-                <div className={`column-header ${sectionComplete ? 'complete' : ''}`}>
-                  <h2>{section.title}</h2>
-                  <span className="section-progress">
-                    {progress.checked}/{progress.total}
-                  </span>
-                </div>
-                
-                {/* Itens da Seção */}
-                <div className="items-list">
-                  {section.items.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => toggleCheck(item.id)}
-                      className={`check-button ${checkedItems[item.id] ? 'checked' : ''}`}
-                    >
-                      <span>{item.label}</span>
-                      <div className="check-icon">
-                        {checkedItems[item.id] && (
-                          <svg 
-                            xmlns="http://www.w3.org/2000/svg" 
-                            viewBox="0 0 24 24" 
-                            fill="none" 
-                            stroke="currentColor"
-                          >
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                          </svg>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Botão de Confirmação Final */}
-        <div className="status-section">
-          {allChecked ? (
-            <div>
-              <div className="status-box status-success">
-                <p>✓ TODOS OS ITENS VERIFICADOS HOJE!</p>
-              </div>
-              <button
-                onClick={handleReset}
-                className="reset-button"
-              >
-                RESETAR CHECAGEM
+          <div className="user-bar">
+            <span>Olá, {currentUser.name}</span>
+            <div className="user-bar-actions">
+              <button type="button" className="icon-button" onClick={() => setShowChangePassword(true)}>
+                <KeyRound size={16} /> Alterar senha
+              </button>
+              <button type="button" className="icon-button" onClick={handleLogout}>
+                <LogOut size={16} /> Sair
               </button>
             </div>
-          ) : (
-            <div>
-              <div className="status-box status-warning">
-                <p>
-                  ⚠ {checkedCount} de {allItems.length} itens verificados
-                </p>
+          </div>
+          <h1>CHECAGEM MANUAL</h1>
+          <p>{isAdmin ? 'Painel de administração' : 'Confirme cada item verificado'}</p>
+          {loadError && <p className="login-error">{loadError}</p>}
+        </div>
+
+        {isAdmin ? (
+          <>
+          {!sectionsLoading && <AdminDashboard sections={sections} checkedItems={checkedItems} />}
+          <div className="admin-dashboard">
+            <button type="button" className="admin-tile" onClick={() => setShowAdmin(true)}>
+              <Users size={28} />
+              <span className="admin-tile-title">Usuários</span>
+              <span className="admin-tile-desc">Criar e gerenciar quem pode registrar as checagens</span>
+            </button>
+            <button type="button" className="admin-tile" onClick={() => setShowAdminSections(true)}>
+              <ListTree size={28} />
+              <span className="admin-tile-title">Tópicos</span>
+              <span className="admin-tile-desc">Criar, editar e organizar os locais e itens da ronda</span>
+            </button>
+            <button type="button" className="admin-tile" onClick={() => setShowReport(true)}>
+              <ClipboardList size={28} />
+              <span className="admin-tile-title">Relatório</span>
+              <span className="admin-tile-desc">Acompanhar o status das rondas por data</span>
+            </button>
+          </div>
+          </>
+        ) : (
+          <>
+            {/* Grid de Seções */}
+            {sectionsLoading ? (
+              <p style={{ textAlign: 'center', marginBottom: '2rem' }}>Carregando tópicos...</p>
+            ) : sections.length === 0 ? (
+              <p style={{ textAlign: 'center', marginBottom: '2rem' }}>Nenhum tópico cadastrado ainda.</p>
+            ) : (
+              <div className="grid-container">
+                {sections.map((section) => {
+                  const progress = getSectionProgress(section);
+                  const sectionComplete = progress.checked === progress.total;
+
+                  return (
+                    <div key={section.id} className="column">
+                      {/* Título da Seção (abre modal) */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection(section.id)}
+                        className={`column-header ${sectionComplete ? 'complete' : ''}`}
+                      >
+                        <h2>{section.title}</h2>
+                        <span className="section-progress">
+                          {progress.checked}/{progress.total}
+                        </span>
+                        <ChevronRight size={20} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
-              {checkedCount > 0 && (
-                <button
-                  onClick={handleReset}
-                  className="reset-button"
-                  style={{ marginTop: '1rem' }}
-                >
-                  RESETAR CHECAGEM
-                </button>
+            )}
+
+            {/* Botão de Confirmação Final */}
+            <div className="status-section">
+              {allChecked ? (
+                <div>
+                  <div className="status-box status-success">
+                    <p>✓ TODOS OS ITENS VERIFICADOS HOJE!</p>
+                  </div>
+                  <button onClick={handleReset} className="reset-button">
+                    RESETAR CHECAGEM
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="status-box status-warning">
+                    <p>
+                      ⚠ {checkedCount} de {allItems.length} itens verificados
+                    </p>
+                  </div>
+                  {checkedCount > 0 && (
+                    <button onClick={handleReset} className="reset-button" style={{ marginTop: '1rem' }}>
+                      RESETAR CHECAGEM
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {/* Timestamp */}
         <div className="timestamp">
@@ -204,6 +298,33 @@ function App() {
           <p>Hora: {new Date().toLocaleTimeString('pt-BR')}</p>
         </div>
       </div>
+
+      {showAdmin && <AdminUsers onClose={() => setShowAdmin(false)} />}
+      {showChangePassword && <ChangePassword onClose={() => setShowChangePassword(false)} />}
+      {showAdminSections && (
+        <AdminSections sections={sections} onReload={loadSections} onClose={() => setShowAdminSections(false)} />
+      )}
+      {activeSection && (
+        <SectionModal
+          section={sections.find((s) => s.id === activeSection)}
+          checkedItems={checkedItems}
+          onSetOnline={setOnline}
+          onRequestOffline={requestOffline}
+          onOpenInstructions={openInstructions}
+          onRemove={removeRegistro}
+          onClose={() => setActiveSection(null)}
+        />
+      )}
+      {instructionsFor && (
+        <ItemInstructions
+          item={instructionsFor.item}
+          onConfirm={confirmInstructions}
+          onClose={() => setInstructionsFor(null)}
+        />
+      )}
+      {obsFor && <ObsModal item={obsFor.item} onConfirm={confirmOffline} onClose={() => setObsFor(null)} />}
+      {showReport && <Report sections={sections} onClose={() => setShowReport(false)} />}
+      <Footer />
     </div>
   );
 }
