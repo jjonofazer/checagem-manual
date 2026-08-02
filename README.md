@@ -1,70 +1,123 @@
-# Getting Started with Create React App
+# Checagem Manual
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Sistema para registro diário de rondas/checagens de infraestrutura (TVs, câmeras,
+backups, sistemas de recepção, etc.), com login por usuário, status **online/offline**
+(com observação obrigatória quando algo está offline), tópicos e itens totalmente
+configuráveis pelo administrador, e relatórios exportáveis para Excel.
 
-## Available Scripts
+## Como funciona
 
-In the project directory, you can run:
+- **Usuários "comuns"** são os operadores: fazem login, abrem cada tópico (HBASE,
+  HRSM, etc.) e marcam cada item como **ONLINE** ou **OFFLINE**. Marcar como offline
+  exige uma observação explicando o problema. A checagem é diária — vira de dia e os
+  registros resetam.
+- **Administradores** não operam a checklist. O painel deles tem:
+  - **Dashboard** com gráficos (status de hoje e tendência dos últimos 7 dias).
+  - **Usuários**: criar e editar quem pode logar (o admin principal, criado
+    automaticamente na primeira execução, não pode ser editado nem excluído).
+  - **Tópicos**: criar, renomear, reordenar e excluir tópicos e itens — incluindo
+    itens com um checklist de instruções extra (ex: câmeras) que aparece antes de
+    poder marcar como online.
+  - **Relatório**: status de qualquer data, por tópico, com exportação para Excel
+    (uma aba "Geral" com tudo, mais uma aba por tópico).
 
-### `npm start`
+## Arquitetura
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Duas partes que rodam separadas:
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+```
+checagem-manual/
+├── src/            # Front-end (React / Create React App)
+├── public/
+└── server/         # Back-end (Node + Express + MySQL)
+    ├── index.js     # rotas da API
+    ├── db.js        # conexão MySQL, criação/seed das tabelas
+    ├── auth.js       # hash de senha (scrypt) e geração de token de sessão
+    └── .env          # configuração local (não versionado)
+```
 
-### `npm test`
+O front-end conversa com o back-end via chamadas a `/api/...`, que em desenvolvimento
+são redirecionadas para `http://localhost:4001` pelo campo `"proxy"` do `package.json`
+raiz.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+**Autenticação**: login por usuário/senha, senha guardada como hash `scrypt` (nunca em
+texto puro), sessão via token simples guardado no `localStorage` do navegador.
 
-### `npm run build`
+**Banco de dados**: MySQL. Tabelas principais: `users`, `sessions`, `sections`,
+`items`, `registros`. O back-end cria o banco e as tabelas sozinho na primeira
+execução (não precisa rodar SQL manualmente).
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Pré-requisitos
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- [Node.js](https://nodejs.org) instalado (`node -v` pra conferir).
+- Um servidor MySQL rodando localmente (ex: instalado direto no Windows, XAMPP, etc.).
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+No Windows, se `npm` der erro de política de execução do PowerShell, use `npm.cmd`
+no lugar de `npm`.
 
-### `npm run eject`
+## Como rodar
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### 1. Backend
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```
+cd server
+npm.cmd install
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+Copie `server/.env.example` para `server/.env` e ajuste as credenciais do seu MySQL:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=sua_senha
+DB_NAME=checagem_manual
+PORT=4001
+```
 
-## Learn More
+Depois:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```
+npm.cmd start
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Na primeira execução, ele cria o banco, as tabelas, os tópicos padrão e um usuário
+administrador:
 
-### Code Splitting
+```
+usuário: admin
+senha: admin123
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+**Troque essa senha assim que logar** (botão "Alterar senha").
 
-### Analyzing the Bundle Size
+### 2. Frontend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Em outro terminal, na raiz do projeto:
 
-### Making a Progressive Web App
+```
+npm.cmd install
+npm.cmd start
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Abre automaticamente em `http://localhost:8080` (porta configurada em `.env` na raiz).
 
-### Advanced Configuration
+## Scripts disponíveis
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+No diretório raiz (front-end):
 
-### Deployment
+- `npm start` — roda o front-end em modo desenvolvimento.
+- `npm test` — roda os testes.
+- `npm run build` — gera a build de produção na pasta `build/`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+Em `server/` (back-end):
 
-### `npm run build` fails to minify
+- `npm start` — sobe a API em `http://localhost:4001`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Segurança
+
+- `server/.env` (senha do banco) e `.env` da raiz nunca devem ser commitados — já
+  estão no `.gitignore`.
+- Senhas de usuário são armazenadas com hash `scrypt` + salt por usuário, nunca em
+  texto puro.
+- Troque a senha do admin padrão (`admin`/`admin123`) assim que possível.
