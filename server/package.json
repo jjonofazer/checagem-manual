@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "backup": "node scripts/criarBackup.js",
-    "restore": "node scripts/restaurarBackup.js",
+    "decrypt-backup": "node scripts/restaurarBackup.js",
     "reset-password": "node scripts/resetPassword.js"
   },
   "dependencies": {

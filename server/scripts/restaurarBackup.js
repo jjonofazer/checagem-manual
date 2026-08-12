@@ -3,22 +3,29 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
-const readline = require('node:readline/promises');
 const dotenv = require('dotenv');
 
 const SERVER_DIR = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(SERVER_DIR, '.env') });
 
 const args = process.argv.slice(2);
-const yes = args.includes('--yes') || args.includes('-y');
 const help = args.includes('--help') || args.includes('-h');
 const sourceArg = args.find((arg) => !arg.startsWith('-'));
 
 function usage() {
-  console.log('Uso: node scripts/restaurarBackup.js <arquivo-backup> [--yes]');
+  console.log('Uso: node scripts/restaurarBackup.js <arquivo-backup>');
   console.log('Formatos aceitos: .sql, .sql.gz, .sql.gz.enc, .enc');
+  console.log('Descriptografa/descompacta o backup e salva um .sql ao lado do arquivo original.');
+}
+
+function resolveDecryptOutputPath(sourcePath) {
+  const dir = path.dirname(sourcePath);
+  let base = path.basename(sourcePath);
+  if (base.toLowerCase().endsWith('.enc')) base = base.slice(0, -4);
+  if (base.toLowerCase().endsWith('.gz')) base = base.slice(0, -3);
+  return path.join(dir, `${base.replace(/\.sql$/i, '')}.descriptografado.sql`);
 }
 
 function stripQuotes(value) {
@@ -54,41 +61,6 @@ function resolveBackupFile(fileName) {
   return path.resolve(getBackupDir(), clean);
 }
 
-function quoteIdentifier(value) {
-  return `\`${String(value).replace(/`/g, '``')}\``;
-}
-
-function mysqlOptionValue(value) {
-  return `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '')}"`;
-}
-
-function getDbConfig() {
-  return {
-    host: process.env.DB_HOST || 'localhost',
-    port: Number(process.env.DB_PORT || 3306),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'checagem_manual'
-  };
-}
-
-function findExecutable(name) {
-  const result = spawnSync('where.exe', [name], { encoding: 'utf8' });
-  if (result.status === 0) {
-    const first = result.stdout.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
-    if (first) return first;
-  }
-
-  const knownPaths = [
-    `C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\${name}`,
-    `C:\\Program Files\\MySQL\\MySQL Server 8.4\\bin\\${name}`,
-    `C:\\xampp\\mysql\\bin\\${name}`,
-    `C:\\wamp64\\bin\\mysql\\mysql8.0.31\\bin\\${name}`
-  ];
-
-  return knownPaths.find((candidate) => fs.existsSync(candidate)) || '';
-}
-
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -103,25 +75,6 @@ function run(command, args, options = {}) {
       else reject(new Error(`${command} saiu com codigo ${code}`));
     });
   });
-}
-
-async function confirmRestore(filePath, dbConfig) {
-  if (yes) return;
-
-  console.log('');
-  console.log('ATENCAO: a restauracao pode substituir dados do banco atual.');
-  console.log(`Banco: ${dbConfig.database} em ${dbConfig.host}:${dbConfig.port}`);
-  console.log(`Arquivo: ${filePath}`);
-  console.log('');
-
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question('Digite RESTAURAR para continuar: ');
-  rl.close();
-
-  if (answer.trim() !== 'RESTAURAR') {
-    console.log('Restauracao cancelada.');
-    process.exit(0);
-  }
 }
 
 async function isGzipFile(filePath) {
@@ -228,81 +181,6 @@ async function prepareSqlFile(sourcePath, tempDir) {
   return workingPath;
 }
 
-async function importWithMysqlCli(sqlPath, dbConfig, tempDir) {
-  const mysqlPath = findExecutable('mysql.exe') || findExecutable('mysql');
-  if (!mysqlPath) return false;
-
-  const defaultsPath = path.join(tempDir, 'mysql-restore.cnf');
-  const defaults = [
-    '[client]',
-    `host=${mysqlOptionValue(dbConfig.host)}`,
-    `port=${mysqlOptionValue(dbConfig.port)}`,
-    `user=${mysqlOptionValue(dbConfig.user)}`,
-    `password=${mysqlOptionValue(dbConfig.password)}`,
-    'default-character-set=utf8mb4',
-    ''
-  ].join(os.EOL);
-
-  await fsp.writeFile(defaultsPath, defaults);
-
-  console.log(`Usando mysql.exe: ${mysqlPath}`);
-  await run(mysqlPath, [
-    `--defaults-extra-file=${defaultsPath}`,
-    '-e',
-    `CREATE DATABASE IF NOT EXISTS ${quoteIdentifier(dbConfig.database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`
-  ]);
-
-  await new Promise((resolve, reject) => {
-    const child = spawn(mysqlPath, [
-      `--defaults-extra-file=${defaultsPath}`,
-      '--default-character-set=utf8mb4',
-      dbConfig.database
-    ], {
-      stdio: ['pipe', 'inherit', 'inherit'],
-      cwd: SERVER_DIR
-    });
-
-    fs.createReadStream(sqlPath).on('error', reject).pipe(child.stdin);
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`mysql.exe saiu com codigo ${code}`));
-    });
-  });
-
-  return true;
-}
-
-async function importWithMysql2(sqlPath, dbConfig) {
-  const mysql = require('mysql2/promise');
-  const sql = await fsp.readFile(sqlPath, 'utf8');
-  const connection = await mysql.createConnection({
-    host: dbConfig.host,
-    port: dbConfig.port,
-    user: dbConfig.user,
-    password: dbConfig.password,
-    multipleStatements: true
-  });
-
-  try {
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS ${quoteIdentifier(dbConfig.database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    );
-    await connection.query(`USE ${quoteIdentifier(dbConfig.database)}`);
-    await connection.query('SET FOREIGN_KEY_CHECKS=0');
-    await connection.query(sql);
-    await connection.query('SET FOREIGN_KEY_CHECKS=1');
-  } finally {
-    await connection.end();
-  }
-}
-
-async function writeRestoreMarker(sourcePath) {
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
-  const markerPath = `${sourcePath}.restaurado.${stamp}.txt`;
-  await fsp.writeFile(markerPath, `Restaurado em ${new Date().toISOString()}${os.EOL}`);
-}
-
 async function main() {
   if (help || !sourceArg) {
     usage();
@@ -315,22 +193,12 @@ async function main() {
     process.exit(1);
   }
 
-  const dbConfig = getDbConfig();
-  await confirmRestore(sourcePath, dbConfig);
-
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'checagem-restore-'));
   try {
     const sqlPath = await prepareSqlFile(sourcePath, tempDir);
-
-    console.log('Restaurando banco de dados...');
-    const usedCli = await importWithMysqlCli(sqlPath, dbConfig, tempDir);
-    if (!usedCli) {
-      console.log('mysql.exe nao encontrado; usando importacao via mysql2.');
-      await importWithMysql2(sqlPath, dbConfig);
-    }
-
-    await writeRestoreMarker(sourcePath);
-    console.log('Restauracao concluida com sucesso.');
+    const outPath = resolveDecryptOutputPath(sourcePath);
+    await fsp.copyFile(sqlPath, outPath);
+    console.log(`Backup descriptografado salvo em: ${outPath}`);
   } finally {
     await fsp.rm(tempDir, { recursive: true, force: true });
   }
@@ -338,7 +206,7 @@ async function main() {
 
 main().catch((err) => {
   console.error('');
-  console.error('Falha ao restaurar backup:');
+  console.error('Falha ao descriptografar backup:');
   console.error(err.message);
   process.exit(1);
 });
