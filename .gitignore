@@ -6,6 +6,12 @@
 .pnp.js
 server/node_modules
 
+# backups, logs e chaves locais
+logs/
+backup-keys/
+server/backups/
+server/.restore-tmp/
+
 # banco de dados local (contem usuarios/registros reais)
 server/data/
 

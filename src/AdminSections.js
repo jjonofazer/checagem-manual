@@ -28,6 +28,7 @@ function AdminSections({ sections, onReload, onClose }) {
   const [error, setError] = useState('');
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [newItemForms, setNewItemForms] = useState({}); // sectionId -> { label, instructions }
+  const [newSubItemForms, setNewSubItemForms] = useState({}); // parentItemId -> { label, instructions }
   const [editingSection, setEditingSection] = useState(null); // { id, title }
   const [editingItem, setEditingItem] = useState(null); // { id, label, instructions }
   const [expandedSections, setExpandedSections] = useState({});
@@ -83,6 +84,26 @@ function AdminSections({ sections, onReload, onClose }) {
         instructions: textToInstructions(form.instructions)
       });
       setNewItemForms((prev) => ({ ...prev, [sectionId]: { label: '', instructions: '' } }));
+    });
+  };
+
+  const getNewSubItemForm = (itemId) => newSubItemForms[itemId] || { label: '', instructions: '' };
+
+  const setNewSubItemForm = (itemId, patch) => {
+    setNewSubItemForms((prev) => ({ ...prev, [itemId]: { ...getNewSubItemForm(itemId), ...patch } }));
+  };
+
+  const handleAddSubItem = (sectionId, parentId) => {
+    const form = getNewSubItemForm(parentId);
+    if (!form.label.trim()) return;
+    runAction(async () => {
+      await createItem({
+        sectionId,
+        parentId,
+        label: form.label.trim(),
+        instructions: textToInstructions(form.instructions)
+      });
+      setNewSubItemForms((prev) => ({ ...prev, [parentId]: { label: '', instructions: '' } }));
     });
   };
 
@@ -189,71 +210,171 @@ function AdminSections({ sections, onReload, onClose }) {
               {expandedSections[section.id] && (
               <div className="item-admin-list">
                 {section.items.map((item, itemIndex) => (
-                  <div key={item.id} className="item-admin-row">
-                    {editingItem?.id === item.id ? (
-                      <div className="item-admin-edit">
-                        <input
-                          type="text"
-                          value={editingItem.label}
-                          onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
-                        />
-                        <textarea
-                          rows={3}
-                          placeholder="Instruções extras (uma ação por linha). Deixe em branco se não precisar."
-                          value={editingItem.instructions}
-                          onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
-                        />
-                        <div className="section-admin-actions">
-                          <button type="button" className="icon-button" onClick={() => handleSaveItem(item.id)}>
-                            Salvar
-                          </button>
-                          <button type="button" className="icon-button" onClick={() => setEditingItem(null)}>
-                            Cancelar
-                          </button>
+                  <div key={item.id} className="item-admin-group">
+                    <div className="item-admin-row">
+                      {editingItem?.id === item.id ? (
+                        <div className="item-admin-edit">
+                          <input
+                            type="text"
+                            value={editingItem.label}
+                            onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
+                          />
+                          <textarea
+                            rows={3}
+                            placeholder="Instruções extras (uma ação por linha). Deixe em branco se não precisar."
+                            value={editingItem.instructions}
+                            onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
+                          />
+                          <div className="section-admin-actions">
+                            <button type="button" className="icon-button" onClick={() => handleSaveItem(item.id)}>
+                              Salvar
+                            </button>
+                            <button type="button" className="icon-button" onClick={() => setEditingItem(null)}>
+                              Cancelar
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <span>
+                            {item.label}
+                            {item.instructions && <em className="item-admin-badge"> (com instruções)</em>}
+                            {item.children.length > 0 && (
+                              <em className="item-admin-badge"> ({item.children.length} sub-itens)</em>
+                            )}
+                          </span>
+                          <div className="section-admin-actions">
+                            <button
+                              type="button"
+                              className="icon-button"
+                              disabled={itemIndex === 0}
+                              onClick={() => runAction(() => moveItem(item.id, 'up'))}
+                            >
+                              <ArrowUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              disabled={itemIndex === section.items.length - 1}
+                              onClick={() => runAction(() => moveItem(item.id, 'down'))}
+                            >
+                              <ArrowDown size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-button"
+                              onClick={() =>
+                                setEditingItem({
+                                  id: item.id,
+                                  label: item.label,
+                                  instructions: instructionsToText(item.instructions)
+                                })
+                              }
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button type="button" className="icon-button" onClick={() => handleDeleteItem(item.id)}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {item.children.length > 0 && (
+                      <div className="item-admin-sublist">
+                        {item.children.map((child, childIndex) => (
+                          <div key={child.id} className="item-admin-row item-admin-subrow">
+                            {editingItem?.id === child.id ? (
+                              <div className="item-admin-edit">
+                                <input
+                                  type="text"
+                                  value={editingItem.label}
+                                  onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
+                                />
+                                <textarea
+                                  rows={3}
+                                  placeholder="Instruções extras (uma ação por linha). Deixe em branco se não precisar."
+                                  value={editingItem.instructions}
+                                  onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
+                                />
+                                <div className="section-admin-actions">
+                                  <button type="button" className="icon-button" onClick={() => handleSaveItem(child.id)}>
+                                    Salvar
+                                  </button>
+                                  <button type="button" className="icon-button" onClick={() => setEditingItem(null)}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <span>
+                                  {child.label}
+                                  {child.instructions && <em className="item-admin-badge"> (com instruções)</em>}
+                                </span>
+                                <div className="section-admin-actions">
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    disabled={childIndex === 0}
+                                    onClick={() => runAction(() => moveItem(child.id, 'up'))}
+                                  >
+                                    <ArrowUp size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    disabled={childIndex === item.children.length - 1}
+                                    onClick={() => runAction(() => moveItem(child.id, 'down'))}
+                                  >
+                                    <ArrowDown size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-button"
+                                    onClick={() =>
+                                      setEditingItem({
+                                        id: child.id,
+                                        label: child.label,
+                                        instructions: instructionsToText(child.instructions)
+                                      })
+                                    }
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button type="button" className="icon-button" onClick={() => handleDeleteItem(child.id)}>
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <>
-                        <span>
-                          {item.label}
-                          {item.instructions && <em className="item-admin-badge"> (com instruções)</em>}
-                        </span>
-                        <div className="section-admin-actions">
-                          <button
-                            type="button"
-                            className="icon-button"
-                            disabled={itemIndex === 0}
-                            onClick={() => runAction(() => moveItem(item.id, 'up'))}
-                          >
-                            <ArrowUp size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            disabled={itemIndex === section.items.length - 1}
-                            onClick={() => runAction(() => moveItem(item.id, 'down'))}
-                          >
-                            <ArrowDown size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-button"
-                            onClick={() =>
-                              setEditingItem({
-                                id: item.id,
-                                label: item.label,
-                                instructions: instructionsToText(item.instructions)
-                              })
-                            }
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button type="button" className="icon-button" onClick={() => handleDeleteItem(item.id)}>
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </>
                     )}
+
+                    <div className="item-admin-add item-admin-add-sub">
+                      <input
+                        type="text"
+                        placeholder={`Novo sub-item em "${item.label}" (ex: DVR 1)`}
+                        value={getNewSubItemForm(item.id).label}
+                        onChange={(e) => setNewSubItemForm(item.id, { label: e.target.value })}
+                      />
+                      <textarea
+                        rows={2}
+                        placeholder="Instruções extras (opcional, uma por linha)"
+                        value={getNewSubItemForm(item.id).instructions}
+                        onChange={(e) => setNewSubItemForm(item.id, { instructions: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => handleAddSubItem(section.id, item.id)}
+                      >
+                        <Plus size={14} /> Adicionar sub-item
+                      </button>
+                    </div>
                   </div>
                 ))}
 

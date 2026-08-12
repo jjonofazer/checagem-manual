@@ -102,12 +102,26 @@ async function init() {
     CREATE TABLE IF NOT EXISTS items (
       id INT AUTO_INCREMENT PRIMARY KEY,
       section_id INT NOT NULL,
+      parent_id INT NULL,
       label VARCHAR(150) NOT NULL,
       instructions TEXT NULL,
       position INT NOT NULL DEFAULT 0,
-      FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
+      FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
     )
   `);
+
+  // Bancos criados antes de sub-itens existirem precisam do ALTER abaixo
+  const [parentCol] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'items' AND COLUMN_NAME = 'parent_id'`,
+    [DB_NAME]
+  );
+  if (parentCol.length === 0) {
+    await pool.query(
+      'ALTER TABLE items ADD COLUMN parent_id INT NULL, ADD FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE'
+    );
+  }
 
   // Esquema antigo de registros usava item_id como texto fixo; a partir de agora
   // itens sao dinamicos (tabela items com id numerico), entao recriamos a tabela.

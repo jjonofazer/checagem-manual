@@ -6,11 +6,13 @@ import AdminUsers from './AdminUsers';
 import ChangePassword from './ChangePassword';
 import AdminSections from './AdminSections';
 import SectionModal from './SectionModal';
+import GroupItemModal from './GroupItemModal';
 import ItemInstructions from './ItemInstructions';
 import ObsModal from './ObsModal';
 import Report from './Report';
 import AdminDashboard from './AdminDashboard';
 import Footer from './Footer';
+import { flattenLeafItems } from './itemUtils';
 import {
   getToken,
   setToken,
@@ -32,6 +34,7 @@ function App() {
   const [sectionsLoading, setSectionsLoading] = useState(true);
   const [checkedItems, setCheckedItems] = useState({});
   const [activeSection, setActiveSection] = useState(null);
+  const [activeGroupItem, setActiveGroupItem] = useState(null);
   const [instructionsFor, setInstructionsFor] = useState(null);
   const [obsFor, setObsFor] = useState(null);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -40,7 +43,7 @@ function App() {
   const [showReport, setShowReport] = useState(false);
   const [loadError, setLoadError] = useState('');
 
-  const allItems = sections.flatMap((section) => section.items);
+  const allItems = sections.flatMap((section) => flattenLeafItems(section.items));
 
   const today = getCurrentDate();
 
@@ -99,6 +102,7 @@ function App() {
     setSectionsLoading(true);
     setCheckedItems({});
     setActiveSection(null);
+    setActiveGroupItem(null);
   };
 
   const setItemStatus = async (item, status, obs) => {
@@ -154,8 +158,9 @@ function App() {
   const checkedCount = allItems.filter((item) => checkedItems[item.id]).length;
 
   const getSectionProgress = (section) => {
-    const checked = section.items.filter((item) => checkedItems[item.id]).length;
-    return { checked, total: section.items.length };
+    const leafItems = flattenLeafItems(section.items);
+    const checked = leafItems.filter((item) => checkedItems[item.id]).length;
+    return { checked, total: leafItems.length };
   };
 
   const handleReset = async () => {
@@ -312,7 +317,19 @@ function App() {
           onRequestOffline={requestOffline}
           onOpenInstructions={openInstructions}
           onRemove={removeRegistro}
+          onOpenGroup={(item) => setActiveGroupItem(item)}
           onClose={() => setActiveSection(null)}
+        />
+      )}
+      {activeGroupItem && (
+        <GroupItemModal
+          item={activeGroupItem}
+          checkedItems={checkedItems}
+          onSetOnline={setOnline}
+          onRequestOffline={requestOffline}
+          onOpenInstructions={openInstructions}
+          onRemove={removeRegistro}
+          onClose={() => setActiveGroupItem(null)}
         />
       )}
       {instructionsFor && (

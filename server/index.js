@@ -1,11 +1,16 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const { init, getPool } = require('./db');
 const { hashPassword, verifyPassword, generateToken } = require('./auth');
+const { startBackupScheduler } = require('./backup');
+
+const BUILD_DIR = path.join(__dirname, '..', 'build');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(BUILD_DIR));
 
 const SESSION_TTL_HOURS = 12;
 
@@ -222,19 +227,22 @@ app.get(
     const pool = getPool();
     const [sectionRows] = await pool.query('SELECT id, title, position FROM sections ORDER BY position, id');
     const [itemRows] = await pool.query(
-      'SELECT id, section_id, label, instructions, position FROM items ORDER BY position, id'
+      'SELECT id, section_id, parent_id, label, instructions, position FROM items ORDER BY position, id'
     );
+
+    const toItem = (item) => ({
+      id: item.id,
+      label: item.label,
+      instructions: parseInstructions(item.instructions),
+      children: itemRows.filter((child) => child.parent_id === item.id).map(toItem)
+    });
 
     const sections = sectionRows.map((section) => ({
       id: section.id,
       title: section.title,
       items: itemRows
-        .filter((item) => item.section_id === section.id)
-        .map((item) => ({
-          id: item.id,
-          label: item.label,
-          instructions: parseInstructions(item.instructions)
-        }))
+        .filter((item) => item.section_id === section.id && item.parent_id === null)
+        .map(toItem)
     }));
 
     res.json({ sections });
@@ -308,19 +316,36 @@ app.post(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const { sectionId, label, instructions } = req.body || {};
+    const { sectionId, parentId, label, instructions } = req.body || {};
     if (!sectionId || !label || !label.trim()) {
       return res.status(400).json({ error: 'Secao e nome do item sao obrigatorios' });
     }
 
     const pool = getPool();
+    const safeParentId = parentId || null;
+
+    if (safeParentId) {
+      const [[parent]] = await pool.query('SELECT id, section_id, parent_id FROM items WHERE id = ?', [safeParentId]);
+      if (!parent || parent.section_id !== Number(sectionId)) {
+        return res.status(400).json({ error: 'Item pai nao encontrado nesta secao' });
+      }
+      if (parent.parent_id !== null) {
+        return res.status(400).json({ error: 'Nao e possivel criar sub-item dentro de outro sub-item' });
+      }
+    }
+
     const [result] = await pool.query(
-      `INSERT INTO items (section_id, label, instructions, position)
-       SELECT ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ?`,
-      [sectionId, label.trim(), sanitizeInstructions(instructions), sectionId]
+      `INSERT INTO items (section_id, parent_id, label, instructions, position)
+       SELECT ?, ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ? AND parent_id <=> ?`,
+      [sectionId, safeParentId, label.trim(), sanitizeInstructions(instructions), sectionId, safeParentId]
     );
     res.status(201).json({
-      item: { id: result.insertId, label: label.trim(), instructions: sanitizeInstructions(instructions) ? instructions : null }
+      item: {
+        id: result.insertId,
+        label: label.trim(),
+        instructions: sanitizeInstructions(instructions) ? instructions : null,
+        children: []
+      }
     });
   })
 );
@@ -359,12 +384,15 @@ app.post(
   wrap(async (req, res) => {
     const { direction } = req.body || {};
     const pool = getPool();
-    const [[item]] = await pool.query('SELECT id, section_id, position FROM items WHERE id = ?', [req.params.id]);
+    const [[item]] = await pool.query('SELECT id, section_id, parent_id, position FROM items WHERE id = ?', [
+      req.params.id
+    ]);
     if (!item) return res.status(404).json({ error: 'Item nao encontrado' });
 
-    const [siblings] = await pool.query('SELECT id, position FROM items WHERE section_id = ? ORDER BY position, id', [
-      item.section_id
-    ]);
+    const [siblings] = await pool.query(
+      'SELECT id, position FROM items WHERE section_id = ? AND parent_id <=> ? ORDER BY position, id',
+      [item.section_id, item.parent_id]
+    );
     const index = siblings.findIndex((s) => s.id === item.id);
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= siblings.length) return res.json({ ok: true });
@@ -469,7 +497,9 @@ app.get(
     const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 90);
     const pool = getPool();
 
-    const [totalRows] = await pool.query('SELECT COUNT(*) AS count FROM items');
+    const [totalRows] = await pool.query(
+      'SELECT COUNT(*) AS count FROM items i WHERE NOT EXISTS (SELECT 1 FROM items c WHERE c.parent_id = i.id)'
+    );
     const totalItems = totalRows[0].count;
 
     const [rows] = await pool.query(
@@ -505,6 +535,11 @@ app.get(
   })
 );
 
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(BUILD_DIR, 'index.html'));
+});
+
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Erro interno do servidor' });
@@ -516,6 +551,7 @@ init()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`API Checagem Manual rodando em http://localhost:${PORT}`);
+      startBackupScheduler();
     });
   })
   .catch((err) => {

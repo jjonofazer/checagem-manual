@@ -100,7 +100,7 @@ npm.cmd install
 npm.cmd start
 ```
 
-Abre automaticamente em `http://localhost:8080` (porta configurada em `.env` na raiz).
+Abre automaticamente em `http://localhost:6000` (porta configurada em `.env` na raiz).
 
 ## Scripts disponíveis
 

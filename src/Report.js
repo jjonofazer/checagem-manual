@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { CheckCircle2, XCircle, Circle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import { getRegistros } from './api';
 import ModalOverlay from './ModalOverlay';
+import { flattenLeafItemsWithLabel } from './itemUtils';
 
 const getCurrentDate = () => new Date().toISOString().split('T')[0];
 
@@ -48,7 +49,7 @@ function Report({ sections, onClose }) {
     setExpandedSections((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const allItems = sections.flatMap((section) => section.items);
+  const allItems = sections.flatMap((section) => flattenLeafItemsWithLabel(section.items));
   const total = allItems.length;
   const onlineCount = allItems.filter((item) => registrosMap[item.id]?.status === 'online').length;
   const offlineCount = allItems.filter((item) => registrosMap[item.id]?.status === 'offline').length;
@@ -60,7 +61,7 @@ function Report({ sections, onClose }) {
 
     const geralRows = [['Seção', 'Item', 'Status', 'Registrado por', 'Horário', 'Observação']];
     sections.forEach((section) => {
-      section.items.forEach((item) => {
+      flattenLeafItemsWithLabel(section.items).forEach((item) => {
         const r = registrosMap[item.id];
         geralRows.push([
           section.title,
@@ -78,7 +79,7 @@ function Report({ sections, onClose }) {
 
     sections.forEach((section) => {
       const rows = [['Item', 'Status', 'Registrado por', 'Horário', 'Observação']];
-      section.items.forEach((item) => {
+      flattenLeafItemsWithLabel(section.items).forEach((item) => {
         const r = registrosMap[item.id];
         rows.push([
           item.label,
@@ -144,7 +145,8 @@ function Report({ sections, onClose }) {
       ) : (
         <div className="report-sections">
           {sections.map((section) => {
-            const sectionChecked = section.items.filter((item) => registrosMap[item.id]).length;
+            const sectionLeafItems = flattenLeafItemsWithLabel(section.items);
+            const sectionChecked = sectionLeafItems.filter((item) => registrosMap[item.id]).length;
             const isExpanded = !!expandedSections[section.id];
 
             return (
@@ -159,13 +161,13 @@ function Report({ sections, onClose }) {
                     <strong>{section.title}</strong>
                   </button>
                   <span className="report-section-count">
-                    {sectionChecked}/{section.items.length}
+                    {sectionChecked}/{sectionLeafItems.length}
                   </span>
                 </div>
 
                 {isExpanded && (
                   <div className="item-admin-list">
-                    {section.items.map((item) => {
+                    {sectionLeafItems.map((item) => {
                       const r = registrosMap[item.id];
                       const status = r?.status;
                       return (

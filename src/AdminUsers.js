@@ -26,7 +26,10 @@ function AdminUsers({ onClose }) {
   }, []);
 
   const handleChange = (field) => (e) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+    let value = e.target.value;
+    if (field === 'name') value = value.toUpperCase();
+    if (field === 'username') value = value.toLowerCase();
+    setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -50,7 +53,10 @@ function AdminUsers({ onClose }) {
   };
 
   const handleEditChange = (field) => (e) => {
-    setEditingUser((prev) => ({ ...prev, [field]: e.target.value }));
+    let value = e.target.value;
+    if (field === 'name') value = value.toUpperCase();
+    if (field === 'username') value = value.toLowerCase();
+    setEditingUser((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSaveEdit = async (e) => {

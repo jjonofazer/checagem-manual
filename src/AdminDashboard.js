@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getDailyStats } from './api';
+import { flattenLeafItems } from './itemUtils';
 
 const STATUS_ORDER = ['online', 'offline', 'pending'];
 const STATUS_META = {
@@ -25,7 +26,7 @@ function AdminDashboard({ sections, checkedItems }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const allItems = sections.flatMap((section) => section.items);
+  const allItems = sections.flatMap((section) => flattenLeafItems(section.items));
   const total = allItems.length;
   const todayOnline = allItems.filter((item) => checkedItems[item.id]?.status === 'online').length;
   const todayOffline = allItems.filter((item) => checkedItems[item.id]?.status === 'offline').length;

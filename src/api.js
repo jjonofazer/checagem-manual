@@ -72,10 +72,10 @@ export function moveSection(id, direction) {
   return request(`/sections/${id}/move`, { method: 'POST', body: JSON.stringify({ direction }) });
 }
 
-export function createItem({ sectionId, label, instructions }) {
+export function createItem({ sectionId, parentId, label, instructions }) {
   return request('/items', {
     method: 'POST',
-    body: JSON.stringify({ sectionId, label, instructions })
+    body: JSON.stringify({ sectionId, parentId, label, instructions })
   });
 }
 

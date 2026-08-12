@@ -5,7 +5,10 @@
   "description": "API local (usuarios + registros) da Checagem Manual",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "backup": "node scripts/criarBackup.js",
+    "restore": "node scripts/restaurarBackup.js",
+    "reset-password": "node scripts/resetPassword.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
