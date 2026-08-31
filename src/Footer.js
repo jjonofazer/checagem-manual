@@ -4,8 +4,8 @@ function Footer() {
   return (
     <footer className="app-footer">
       <div className="footer-glass">
-        <p>CHECAGEM DE SISTEMAS</p>
-        <p>© {new Date().getFullYear()} Jonathan Almeida Vieira</p>
+        <p>SISTEMA DE CHECAGEM</p>
+        <p>• J.A.V. Dev • © {new Date().getFullYear()}</p>
       </div>
     </footer>
   );
