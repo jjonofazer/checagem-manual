@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Pencil } from 'lucide-react';
-import { listUsers, createUser, updateUser } from './api';
+import { Pencil, Ban, CircleCheck } from 'lucide-react';
+import { listUsers, createUser, updateUser, toggleUserActive } from './api';
 import ModalOverlay from './ModalOverlay';
 
 function AdminUsers({ onClose }) {
@@ -11,6 +11,7 @@ function AdminUsers({ onClose }) {
   const [editingUser, setEditingUser] = useState(null); // { id, username, name, role, password }
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const loadUsers = async () => {
     try {
@@ -76,6 +77,19 @@ function AdminUsers({ onClose }) {
       setEditError(err.message);
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleToggleActive = async (u) => {
+    setError('');
+    setTogglingId(u.id);
+    try {
+      await toggleUserActive(u.id);
+      await loadUsers();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -165,18 +179,37 @@ function AdminUsers({ onClose }) {
               </div>
             </form>
           ) : (
-            <div key={u.id} className="user-row">
+            <div key={u.id} className={`user-row ${!u.active ? 'user-row-inactive' : ''}`}>
               <div>
                 <span>{u.name}</span>
                 <span className="user-row-meta">
                   {' '}
                   · @{u.username} · {u.role === 'admin' ? 'admin' : 'usuário'}
+                  {!u.active && <em className="item-frequency-badge user-inactive-badge"> INATIVO</em>}
                 </span>
               </div>
               {u.id !== 1 && (
-                <button type="button" className="icon-button" onClick={() => startEdit(u)}>
-                  <Pencil size={14} /> Editar
-                </button>
+                <div className="section-admin-actions">
+                  <button type="button" className="icon-button" onClick={() => startEdit(u)}>
+                    <Pencil size={14} /> Editar
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={togglingId === u.id}
+                    onClick={() => handleToggleActive(u)}
+                  >
+                    {u.active ? (
+                      <>
+                        <Ban size={14} /> Desativar
+                      </>
+                    ) : (
+                      <>
+                        <CircleCheck size={14} /> Ativar
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           )

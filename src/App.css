@@ -572,6 +572,21 @@ body {
   font-size: 0.8125rem;
 }
 
+.user-row-inactive {
+  border-color: #fecaca;
+  background: linear-gradient(180deg, #fef2f2, #ffffff);
+  opacity: 0.75;
+}
+
+.user-row-inactive:hover {
+  border-color: #fca5a5;
+}
+
+.user-inactive-badge {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 /* Instrucoes de item (ex: camera) */
 .instructions-list {
   margin: 0 0 1.5rem;

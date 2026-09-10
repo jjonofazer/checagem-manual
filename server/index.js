@@ -68,6 +68,9 @@ app.post(
     if (!user || !verifyPassword(password, user.password_salt, user.password_hash)) {
       return res.status(401).json({ error: 'Usuario ou senha invalidos' });
     }
+    if (!user.active) {
+      return res.status(403).json({ error: 'Usuario desativado. Fale com o administrador.' });
+    }
 
     const token = await createSession(user.id);
     res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
@@ -122,7 +125,7 @@ app.get(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const [users] = await getPool().query('SELECT id, username, name, role, created_at FROM users ORDER BY name');
+    const [users] = await getPool().query('SELECT id, username, name, role, active, created_at FROM users ORDER BY name');
     res.json({ users });
   })
 );
@@ -202,6 +205,31 @@ app.put(
     }
 
     res.json({ ok: true });
+  })
+);
+
+app.post(
+  '/api/users/:id/toggle-active',
+  authMiddleware,
+  adminOnly,
+  wrap(async (req, res) => {
+    const targetId = Number(req.params.id);
+    if (targetId === 1) {
+      return res.status(403).json({ error: 'O administrador principal não pode ser desativado' });
+    }
+
+    const pool = getPool();
+    const [[user]] = await pool.query('SELECT id, active FROM users WHERE id = ?', [targetId]);
+    if (!user) return res.status(404).json({ error: 'Usuario nao encontrado' });
+
+    const nextActive = user.active ? 0 : 1;
+    await pool.query('UPDATE users SET active = ? WHERE id = ?', [nextActive, targetId]);
+
+    if (!nextActive) {
+      await pool.query('DELETE FROM sessions WHERE user_id = ?', [targetId]);
+    }
+
+    res.json({ ok: true, active: !!nextActive });
   })
 );
 

@@ -76,9 +76,20 @@ async function init() {
       password_hash VARCHAR(255) NOT NULL,
       password_salt VARCHAR(255) NOT NULL,
       role VARCHAR(20) NOT NULL DEFAULT 'user',
+      active TINYINT(1) NOT NULL DEFAULT 1,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Bancos criados antes de usuarios poderem ser desativados precisam do ALTER abaixo
+  const [activeCol] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND COLUMN_NAME = 'active'`,
+    [DB_NAME]
+  );
+  if (activeCol.length === 0) {
+    await pool.query('ALTER TABLE users ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1');
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (

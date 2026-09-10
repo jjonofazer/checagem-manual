@@ -134,3 +134,7 @@ export function updateUser(id, { username, name, password, role }) {
     body: JSON.stringify({ username, name, password, role })
   });
 }
+
+export function toggleUserActive(id) {
+  return request(`/users/${id}/toggle-active`, { method: 'POST' });
+}

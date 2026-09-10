@@ -148,7 +148,7 @@ function AdminSections({ sections, onReload, onClose }) {
               id="new-section-title"
               type="text"
               value={newSectionTitle}
-              onChange={(e) => setNewSectionTitle(e.target.value)}
+              onChange={(e) => setNewSectionTitle(e.target.value.toUpperCase())}
               placeholder="Ex: SALA DE RAIO-X"
             />
             <button type="submit" className="icon-button">
@@ -166,7 +166,7 @@ function AdminSections({ sections, onReload, onClose }) {
                     <input
                       type="text"
                       value={editingSection.title}
-                      onChange={(e) => setEditingSection({ id: section.id, title: e.target.value })}
+                      onChange={(e) => setEditingSection({ id: section.id, title: e.target.value.toUpperCase() })}
                     />
                     <button type="button" className="icon-button" onClick={() => handleSaveSection(section.id)}>
                       Salvar
@@ -227,7 +227,7 @@ function AdminSections({ sections, onReload, onClose }) {
                           <input
                             type="text"
                             value={editingItem.label}
-                            onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
+                            onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value.toUpperCase() })}
                           />
                           <textarea
                             rows={3}
@@ -314,7 +314,7 @@ function AdminSections({ sections, onReload, onClose }) {
                                 <input
                                   type="text"
                                   value={editingItem.label}
-                                  onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value })}
+                                  onChange={(e) => setEditingItem({ ...editingItem, label: e.target.value.toUpperCase() })}
                                 />
                                 <textarea
                                   rows={3}
@@ -397,7 +397,7 @@ function AdminSections({ sections, onReload, onClose }) {
                         type="text"
                         placeholder={`Novo sub-item em "${item.label}" (ex: DVR 1)`}
                         value={getNewSubItemForm(item.id).label}
-                        onChange={(e) => setNewSubItemForm(item.id, { label: e.target.value })}
+                        onChange={(e) => setNewSubItemForm(item.id, { label: e.target.value.toUpperCase() })}
                       />
                       <textarea
                         rows={2}
@@ -431,7 +431,7 @@ function AdminSections({ sections, onReload, onClose }) {
                     type="text"
                     placeholder="Novo item"
                     value={getNewItemForm(section.id).label}
-                    onChange={(e) => setNewItemForm(section.id, { label: e.target.value })}
+                    onChange={(e) => setNewItemForm(section.id, { label: e.target.value.toUpperCase() })}
                   />
                   <textarea
                     rows={2}
