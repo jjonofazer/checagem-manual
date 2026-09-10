@@ -8,6 +8,7 @@ const { pipeline } = require('node:stream/promises');
 const dotenv = require('dotenv');
 const mysql = require('mysql2');
 const mysqlPromise = require('mysql2/promise');
+const { loadPfx, encryptBuffer } = require('./certCrypto');
 
 const SERVER_DIR = __dirname;
 dotenv.config({ path: path.join(SERVER_DIR, '.env') });
@@ -109,22 +110,6 @@ function findExecutable(name) {
   ];
 
   return knownPaths.find((candidate) => fs.existsSync(candidate)) || '';
-}
-
-function run(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      stdio: options.stdio || 'inherit',
-      env: options.env || process.env,
-      cwd: options.cwd || SERVER_DIR
-    });
-
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} saiu com codigo ${code}`));
-    });
-  });
 }
 
 async function dumpWithMysqldump(outputPath, dbConfig, tempDir) {
@@ -234,65 +219,18 @@ async function gzipFile(inputPath, outputPath) {
   await pipeline(fs.createReadStream(inputPath), zlib.createGzip({ level: 9 }), fs.createWriteStream(outputPath));
 }
 
-async function writeBase64File(inputPath, outputPath) {
-  const bytes = await fsp.readFile(inputPath);
-  await fsp.writeFile(outputPath, bytes.toString('base64'), 'ascii');
-}
-
-async function encryptBase64WithCertificate(base64Path, encryptedPath, backupConfig) {
+// Envelope encryption (AES-256-GCM + RSA-OAEP) direto em Node, sem depender de
+// PowerShell/Protect-CmsMessage nem de importar o certificado no Windows Cert
+// Store a cada backup. So a chave PUBLICA do .pfx e usada aqui.
+async function encryptFileWithCertificate(inputPath, outputPath, backupConfig) {
   if (!fs.existsSync(backupConfig.certPath)) {
     throw new Error(`Certificado/PFX nao encontrado: ${backupConfig.certPath}`);
   }
 
-  const ps = `
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
-$certPath = $env:BACKUP_CERT_PATH_RUNTIME
-$inputPath = $env:BACKUP_BASE64_PATH_RUNTIME
-$outPath = $env:BACKUP_ENC_PATH_RUNTIME
-$thumbprint = $null
-
-if ([string]::IsNullOrWhiteSpace($certPath) -or -not (Test-Path -LiteralPath $certPath)) {
-  throw "Certificado/PFX nao encontrado: $certPath"
-}
-
-if ($certPath.ToLowerInvariant().EndsWith('.pfx')) {
-  if ([string]::IsNullOrWhiteSpace($env:BACKUP_PFX_PASSWORD)) {
-    throw 'BACKUP_PFX_PASSWORD nao configurado no server\\.env'
-  }
-
-  $securePassword = ConvertTo-SecureString $env:BACKUP_PFX_PASSWORD -AsPlainText -Force
-  $cert = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\\CurrentUser\\My -Password $securePassword | Select-Object -First 1
-  if ($null -eq $cert) {
-    throw 'Nao foi possivel importar o PFX'
-  }
-  $thumbprint = $cert.Thumbprint
-} else {
-  $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)
-}
-
-try {
-  $content = Get-Content -LiteralPath $inputPath -Raw -Encoding ascii
-  Protect-CmsMessage -To $cert -Content $content -OutFile $outPath
-} finally {
-  if ($thumbprint) {
-    Remove-Item -Path "Cert:\\CurrentUser\\My\\$thumbprint" -DeleteKey -ErrorAction SilentlyContinue
-  }
-}
-`;
-
-  await run(
-    'powershell.exe',
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')],
-    {
-      env: {
-        ...process.env,
-        BACKUP_CERT_PATH_RUNTIME: backupConfig.certPath,
-        BACKUP_BASE64_PATH_RUNTIME: base64Path,
-        BACKUP_ENC_PATH_RUNTIME: encryptedPath
-      }
-    }
-  );
+  const { publicKeyPem } = loadPfx(backupConfig.certPath, backupConfig.pfxPassword);
+  const data = await fsp.readFile(inputPath);
+  const encrypted = encryptBuffer(data, publicKeyPem);
+  await fsp.writeFile(outputPath, encrypted);
 }
 
 async function cleanupOldBackups(outputDir, retentionDays) {
@@ -330,8 +268,6 @@ async function createEncryptedBackup(reason = 'manual') {
     const stamp = timestamp();
     const sqlPath = path.join(tempDir, 'backup.sql');
     const gzPath = path.join(tempDir, 'backup.sql.gz');
-    const base64Path = path.join(tempDir, 'backup.sql.gz.base64');
-    const encryptedTempPath = path.join(tempDir, `backup-${stamp}.sql.gz.enc`);
     const finalPath = path.join(backupConfig.outputDir, `backup-${stamp}.sql.gz.enc`);
 
     console.log(`[backup] Iniciando backup (${reason}) do banco ${dbConfig.database}.`);
@@ -343,9 +279,7 @@ async function createEncryptedBackup(reason = 'manual') {
     }
 
     await gzipFile(sqlPath, gzPath);
-    await writeBase64File(gzPath, base64Path);
-    await encryptBase64WithCertificate(base64Path, encryptedTempPath, backupConfig);
-    await fsp.copyFile(encryptedTempPath, finalPath);
+    await encryptFileWithCertificate(gzPath, finalPath, backupConfig);
     await cleanupOldBackups(backupConfig.outputDir, backupConfig.retentionDays);
 
     console.log(`[backup] Backup criptografado criado: ${finalPath}`);

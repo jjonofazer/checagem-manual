@@ -4,6 +4,7 @@ const cors = require('cors');
 const { init, getPool } = require('./db');
 const { hashPassword, verifyPassword, generateToken } = require('./auth');
 const { startBackupScheduler } = require('./backup');
+const { sanitizeFrequency, getPeriodKey, isoWeekKey, monthKey } = require('./periodUtils');
 
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 
@@ -227,13 +228,14 @@ app.get(
     const pool = getPool();
     const [sectionRows] = await pool.query('SELECT id, title, position FROM sections ORDER BY position, id');
     const [itemRows] = await pool.query(
-      'SELECT id, section_id, parent_id, label, instructions, position FROM items ORDER BY position, id'
+      'SELECT id, section_id, parent_id, label, instructions, frequency, position FROM items ORDER BY position, id'
     );
 
     const toItem = (item) => ({
       id: item.id,
       label: item.label,
       instructions: parseInstructions(item.instructions),
+      frequency: item.frequency,
       children: itemRows.filter((child) => child.parent_id === item.id).map(toItem)
     });
 
@@ -316,13 +318,14 @@ app.post(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const { sectionId, parentId, label, instructions } = req.body || {};
+    const { sectionId, parentId, label, instructions, frequency } = req.body || {};
     if (!sectionId || !label || !label.trim()) {
       return res.status(400).json({ error: 'Secao e nome do item sao obrigatorios' });
     }
 
     const pool = getPool();
     const safeParentId = parentId || null;
+    const safeFrequency = sanitizeFrequency(frequency);
 
     if (safeParentId) {
       const [[parent]] = await pool.query('SELECT id, section_id, parent_id FROM items WHERE id = ?', [safeParentId]);
@@ -335,15 +338,16 @@ app.post(
     }
 
     const [result] = await pool.query(
-      `INSERT INTO items (section_id, parent_id, label, instructions, position)
-       SELECT ?, ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ? AND parent_id <=> ?`,
-      [sectionId, safeParentId, label.trim(), sanitizeInstructions(instructions), sectionId, safeParentId]
+      `INSERT INTO items (section_id, parent_id, label, instructions, frequency, position)
+       SELECT ?, ?, ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ? AND parent_id <=> ?`,
+      [sectionId, safeParentId, label.trim(), sanitizeInstructions(instructions), safeFrequency, sectionId, safeParentId]
     );
     res.status(201).json({
       item: {
         id: result.insertId,
         label: label.trim(),
         instructions: sanitizeInstructions(instructions) ? instructions : null,
+        frequency: safeFrequency,
         children: []
       }
     });
@@ -355,12 +359,13 @@ app.put(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const { label, instructions } = req.body || {};
+    const { label, instructions, frequency } = req.body || {};
     if (!label || !label.trim()) return res.status(400).json({ error: 'Nome do item e obrigatorio' });
 
-    await getPool().query('UPDATE items SET label = ?, instructions = ? WHERE id = ?', [
+    await getPool().query('UPDATE items SET label = ?, instructions = ?, frequency = ? WHERE id = ?', [
       label.trim(),
       sanitizeInstructions(instructions),
+      sanitizeFrequency(frequency),
       req.params.id
     ]);
     res.json({ ok: true });
@@ -405,6 +410,15 @@ app.post(
 );
 
 // --- Registros ---
+// Itens semanais/mensais continuam "verificados" pelo resto do periodo, mesmo
+// registrados em outro dia dentro dele; por isso o registro e buscado/gravado
+// pela period_key do item (diaria = a propria data, semanal = semana ISO,
+// mensal = ano-mes), nao pela data exata em que foi marcado.
+async function getItemFrequency(pool, itemId) {
+  const [[item]] = await pool.query('SELECT frequency FROM items WHERE id = ?', [itemId]);
+  return item ? item.frequency : null;
+}
+
 app.get(
   '/api/registros',
   authMiddleware,
@@ -414,9 +428,13 @@ app.get(
 
     const [rows] = await getPool().query(
       `SELECT r.item_id, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
-       FROM registros r JOIN users u ON u.id = r.user_id
-       WHERE r.date = ?`,
-      [date]
+       FROM registros r
+       JOIN items i ON i.id = r.item_id
+       JOIN users u ON u.id = r.user_id
+       WHERE (i.frequency = 'daily' AND r.period_key = ?)
+          OR (i.frequency = 'weekly' AND r.period_key = ?)
+          OR (i.frequency = 'monthly' AND r.period_key = ?)`,
+      [date, isoWeekKey(date), monthKey(date)]
     );
 
     res.json({ registros: rows });
@@ -438,25 +456,22 @@ app.post(
     const safeObs = safeStatus === 'offline' ? obs.trim() : null;
 
     const pool = getPool();
-    try {
-      await pool.query(
-        `INSERT INTO registros (item_id, date, user_id, status, obs)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), status = VALUES(status), obs = VALUES(obs), registered_at = CURRENT_TIMESTAMP`,
-        [itemId, date, req.user.id, safeStatus, safeObs]
-      );
-    } catch (err) {
-      if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') {
-        return res.status(400).json({ error: 'Item nao encontrado' });
-      }
-      throw err;
-    }
+    const frequency = await getItemFrequency(pool, itemId);
+    if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
+    const periodKey = getPeriodKey(date, frequency);
+
+    await pool.query(
+      `INSERT INTO registros (item_id, date, period_key, user_id, status, obs)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE date = VALUES(date), user_id = VALUES(user_id), status = VALUES(status), obs = VALUES(obs), registered_at = CURRENT_TIMESTAMP`,
+      [itemId, date, periodKey, req.user.id, safeStatus, safeObs]
+    );
 
     const [rows] = await pool.query(
       `SELECT r.item_id, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
        FROM registros r JOIN users u ON u.id = r.user_id
-       WHERE r.item_id = ? AND r.date = ?`,
-      [itemId, date]
+       WHERE r.item_id = ? AND r.period_key = ?`,
+      [itemId, periodKey]
     );
 
     res.status(201).json({ registro: rows[0] });
@@ -471,7 +486,14 @@ app.delete(
     const { date } = req.query;
     if (!date) return res.status(400).json({ error: 'Parametro date e obrigatorio' });
 
-    await getPool().query('DELETE FROM registros WHERE item_id = ? AND date = ?', [itemId, date]);
+    const pool = getPool();
+    const frequency = await getItemFrequency(pool, itemId);
+    if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
+
+    await pool.query('DELETE FROM registros WHERE item_id = ? AND period_key = ?', [
+      itemId,
+      getPeriodKey(date, frequency)
+    ]);
     res.json({ ok: true });
   })
 );
@@ -483,7 +505,10 @@ app.delete(
     const { date } = req.query;
     if (!date) return res.status(400).json({ error: 'Parametro date e obrigatorio' });
 
-    await getPool().query('DELETE FROM registros WHERE date = ?', [date]);
+    // period_key de um item diario e a propria data; itens semanais/mensais tem
+    // period_key em outro formato (semana ISO / ano-mes), entao esse "resetar"
+    // so afeta os itens diarios de hoje, como esperado.
+    await getPool().query('DELETE FROM registros WHERE period_key = ?', [date]);
     res.json({ ok: true });
   })
 );
@@ -502,26 +527,29 @@ app.get(
     );
     const totalItems = totalRows[0].count;
 
-    const [rows] = await pool.query(
-      `SELECT date, status, COUNT(*) AS count
-       FROM registros
-       WHERE date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-       GROUP BY date, status`,
-      [days - 1]
-    );
-
-    const byDate = {};
-    rows.forEach((r) => {
-      if (!byDate[r.date]) byDate[r.date] = { online: 0, offline: 0 };
-      byDate[r.date][r.status] = r.count;
-    });
-
+    // Itens semanais/mensais ficam "validos" por varios dias seguidos a partir de
+    // quando foram registrados, entao a contagem de cada dia do grafico precisa
+    // resolver o period_key correspondente aquele dia (nao so bater a data exata).
     const daily = [];
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
-      const entry = byDate[dateStr] || { online: 0, offline: 0 };
+
+      const [rows] = await pool.query(
+        `SELECT r.status, COUNT(*) AS count
+         FROM registros r
+         JOIN items i ON i.id = r.item_id
+         WHERE (i.frequency = 'daily' AND r.period_key = ?)
+            OR (i.frequency = 'weekly' AND r.period_key = ?)
+            OR (i.frequency = 'monthly' AND r.period_key = ?)
+         GROUP BY r.status`,
+        [dateStr, isoWeekKey(dateStr), monthKey(dateStr)]
+      );
+
+      const entry = { online: 0, offline: 0 };
+      rows.forEach((r) => { entry[r.status] = r.count; });
+
       daily.push({
         date: dateStr,
         online: entry.online,

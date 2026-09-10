@@ -1,3 +1,13 @@
+export const FREQUENCY_LABELS = {
+  daily: 'DIÁRIA',
+  weekly: 'SEMANAL',
+  monthly: 'MENSAL'
+};
+
+export function frequencyLabel(frequency) {
+  return FREQUENCY_LABELS[frequency] || null;
+}
+
 export function flattenLeafItems(items) {
   return items.flatMap((item) =>
     item.children && item.children.length > 0 ? flattenLeafItems(item.children) : [item]
@@ -13,6 +23,6 @@ export function flattenLeafItemsWithLabel(items, prefix = '') {
     if (item.children && item.children.length > 0) {
       return flattenLeafItemsWithLabel(item.children, label);
     }
-    return [{ id: item.id, label }];
+    return [{ id: item.id, label, frequency: item.frequency }];
   });
 }

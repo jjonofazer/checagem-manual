@@ -1,9 +1,18 @@
 import React from 'react';
+import { frequencyLabel } from './itemUtils';
+
+function formatRegisteredDate(isoString) {
+  if (!isoString) return '';
+  const [datePart] = isoString.split(' ').length > 1 ? isoString.split(' ') : isoString.split('T');
+  const [year, month, day] = datePart.split('-');
+  return `${day}/${month}/${year}`;
+}
 
 function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstructions, onRemove }) {
   const hasInstructions = !!item.instructions;
   const isOnline = registro?.status === 'online';
   const isOffline = registro?.status === 'offline';
+  const isNotDaily = item.frequency && item.frequency !== 'daily';
 
   const handleOnlineClick = () => {
     if (isOnline) {
@@ -28,10 +37,14 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
   return (
     <div className={`check-item ${isOnline ? 'checked' : ''} ${isOffline ? 'offline' : ''}`}>
       <div className="check-item-info">
-        <span>{item.label}</span>
+        <span>
+          {item.label}
+          {isNotDaily && <em className="item-frequency-badge">{frequencyLabel(item.frequency)}</em>}
+        </span>
         {registro && (
           <span className={`registered-by ${isOffline ? 'registered-offline' : ''}`}>
             {isOffline ? 'OFFLINE' : 'ONLINE'} · {registro.name}
+            {isNotDaily && registro.registeredAt ? ` — em ${formatRegisteredDate(registro.registeredAt)}` : ''}
             {isOffline && registro.obs ? ` — Obs: ${registro.obs}` : ''}
           </span>
         )}

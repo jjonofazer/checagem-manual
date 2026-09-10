@@ -6,6 +6,7 @@ const zlib = require('node:zlib');
 const { spawn } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const dotenv = require('dotenv');
+const { loadPfx, decryptBuffer, looksLikeEnvelopeFormat } = require('../certCrypto');
 
 const SERVER_DIR = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(SERVER_DIR, '.env') });
@@ -111,6 +112,23 @@ async function normalizeCmsOutput(filePath, tempDir) {
   return decodedPath;
 }
 
+function getPfxPassword() {
+  return process.env.BACKUP_PFX_PASSWORD || '';
+}
+
+// Backups novos usam envelope encryption nativo (ver certCrypto.js); backups
+// antigos (gerados antes dessa mudanca) foram cifrados via PowerShell
+// Protect-CmsMessage e continuam legiveis por esse caminho legado.
+async function decryptEnvelopeFile(inputPath, outputPath) {
+  const pfxPath = getPfxPath();
+  if (!pfxPath) throw new Error('Certificado/PFX nao encontrado (BACKUP_PFX_PATH)');
+
+  const { privateKeyPem } = loadPfx(pfxPath, getPfxPassword());
+  const encrypted = await fsp.readFile(inputPath);
+  const decrypted = decryptBuffer(encrypted, privateKeyPem);
+  await fsp.writeFile(outputPath, decrypted);
+}
+
 async function decryptCmsFile(inputPath, outputPath) {
   const pfxPath = getPfxPath();
 
@@ -166,8 +184,16 @@ async function prepareSqlFile(sourcePath, tempDir) {
   if (lower.endsWith('.enc')) {
     const decryptedPath = path.join(tempDir, path.basename(sourcePath, '.enc'));
     console.log('Descriptografando backup...');
-    await decryptCmsFile(sourcePath, decryptedPath);
-    workingPath = await normalizeCmsOutput(decryptedPath, tempDir);
+
+    const rawBytes = await fsp.readFile(sourcePath);
+    if (looksLikeEnvelopeFormat(rawBytes)) {
+      await decryptEnvelopeFile(sourcePath, decryptedPath);
+      workingPath = decryptedPath;
+    } else {
+      console.log('Formato antigo detectado (CMS); usando PowerShell para descriptografar.');
+      await decryptCmsFile(sourcePath, decryptedPath);
+      workingPath = await normalizeCmsOutput(decryptedPath, tempDir);
+    }
   }
 
   const isGzip = workingPath.toLowerCase().endsWith('.gz') || (await isGzipFile(workingPath));

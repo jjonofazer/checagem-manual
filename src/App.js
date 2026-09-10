@@ -71,7 +71,13 @@ function App() {
       .then(({ registros }) => {
         const mapped = {};
         registros.forEach((r) => {
-          mapped[r.item_id] = { name: r.user_name, username: r.username, status: r.status, obs: r.obs };
+          mapped[r.item_id] = {
+            name: r.user_name,
+            username: r.username,
+            status: r.status,
+            obs: r.obs,
+            registeredAt: r.registered_at
+          };
         });
         setCheckedItems(mapped);
       })
@@ -111,7 +117,13 @@ function App() {
       const { registro } = await createRegistro({ itemId: item.id, date: today, status, obs });
       setCheckedItems((prev) => ({
         ...prev,
-        [item.id]: { name: registro.user_name, username: registro.username, status: registro.status, obs: registro.obs }
+        [item.id]: {
+          name: registro.user_name,
+          username: registro.username,
+          status: registro.status,
+          obs: registro.obs,
+          registeredAt: registro.registered_at
+        }
       }));
     } catch (err) {
       setLoadError(err.message);

@@ -469,6 +469,19 @@ body {
   font-size: 0.75rem;
 }
 
+.item-frequency-badge {
+  margin-left: 0.375rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.625rem;
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
 .item-admin-edit {
   display: flex;
   flex-direction: column;
@@ -478,8 +491,10 @@ body {
 
 .item-admin-edit input,
 .item-admin-edit textarea,
+.item-admin-edit select,
 .item-admin-add input,
-.item-admin-add textarea {
+.item-admin-add textarea,
+.item-admin-add select {
   padding: 0.5rem 0.625rem;
   border-radius: 0.375rem;
   border: 2px solid #d1d5db;

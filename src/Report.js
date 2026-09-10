@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { CheckCircle2, XCircle, Circle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import { getRegistros } from './api';
 import ModalOverlay from './ModalOverlay';
-import { flattenLeafItemsWithLabel } from './itemUtils';
+import { flattenLeafItemsWithLabel, frequencyLabel } from './itemUtils';
 
 const getCurrentDate = () => new Date().toISOString().split('T')[0];
 
@@ -173,7 +173,12 @@ function Report({ sections, onClose }) {
                       return (
                         <div key={item.id} className="report-item-row">
                           <div className="report-item-info">
-                            <span>{item.label}</span>
+                            <span>
+                              {item.label}
+                              {item.frequency !== 'daily' && (
+                                <em className="item-frequency-badge">{frequencyLabel(item.frequency)}</em>
+                              )}
+                            </span>
                             {r && (
                               <span className="report-item-meta">
                                 {r.user_name} às {r.registered_at ? r.registered_at.slice(11, 19) : ''}

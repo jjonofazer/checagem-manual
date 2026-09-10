@@ -11,6 +11,13 @@ import {
   moveItem
 } from './api';
 import ModalOverlay from './ModalOverlay';
+import { frequencyLabel } from './itemUtils';
+
+const FREQUENCY_OPTIONS = [
+  { value: 'daily', label: 'Diária' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'monthly', label: 'Mensal' }
+];
 
 function instructionsToText(instructions) {
   return Array.isArray(instructions) ? instructions.join('\n') : '';
@@ -68,7 +75,7 @@ function AdminSections({ sections, onReload, onClose }) {
     runAction(() => deleteSection(id));
   };
 
-  const getNewItemForm = (sectionId) => newItemForms[sectionId] || { label: '', instructions: '' };
+  const getNewItemForm = (sectionId) => newItemForms[sectionId] || { label: '', instructions: '', frequency: 'daily' };
 
   const setNewItemForm = (sectionId, patch) => {
     setNewItemForms((prev) => ({ ...prev, [sectionId]: { ...getNewItemForm(sectionId), ...patch } }));
@@ -81,13 +88,14 @@ function AdminSections({ sections, onReload, onClose }) {
       await createItem({
         sectionId,
         label: form.label.trim(),
-        instructions: textToInstructions(form.instructions)
+        instructions: textToInstructions(form.instructions),
+        frequency: form.frequency
       });
-      setNewItemForms((prev) => ({ ...prev, [sectionId]: { label: '', instructions: '' } }));
+      setNewItemForms((prev) => ({ ...prev, [sectionId]: { label: '', instructions: '', frequency: 'daily' } }));
     });
   };
 
-  const getNewSubItemForm = (itemId) => newSubItemForms[itemId] || { label: '', instructions: '' };
+  const getNewSubItemForm = (itemId) => newSubItemForms[itemId] || { label: '', instructions: '', frequency: 'daily' };
 
   const setNewSubItemForm = (itemId, patch) => {
     setNewSubItemForms((prev) => ({ ...prev, [itemId]: { ...getNewSubItemForm(itemId), ...patch } }));
@@ -101,9 +109,10 @@ function AdminSections({ sections, onReload, onClose }) {
         sectionId,
         parentId,
         label: form.label.trim(),
-        instructions: textToInstructions(form.instructions)
+        instructions: textToInstructions(form.instructions),
+        frequency: form.frequency
       });
-      setNewSubItemForms((prev) => ({ ...prev, [parentId]: { label: '', instructions: '' } }));
+      setNewSubItemForms((prev) => ({ ...prev, [parentId]: { label: '', instructions: '', frequency: 'daily' } }));
     });
   };
 
@@ -111,7 +120,8 @@ function AdminSections({ sections, onReload, onClose }) {
     runAction(async () => {
       await updateItem(id, {
         label: editingItem.label,
-        instructions: textToInstructions(editingItem.instructions)
+        instructions: textToInstructions(editingItem.instructions),
+        frequency: editingItem.frequency
       });
       setEditingItem(null);
     });
@@ -225,6 +235,16 @@ function AdminSections({ sections, onReload, onClose }) {
                             value={editingItem.instructions}
                             onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
                           />
+                          <select
+                            value={editingItem.frequency}
+                            onChange={(e) => setEditingItem({ ...editingItem, frequency: e.target.value })}
+                          >
+                            {FREQUENCY_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
                           <div className="section-admin-actions">
                             <button type="button" className="icon-button" onClick={() => handleSaveItem(item.id)}>
                               Salvar
@@ -238,6 +258,9 @@ function AdminSections({ sections, onReload, onClose }) {
                         <>
                           <span>
                             {item.label}
+                            {item.frequency !== 'daily' && (
+                              <em className="item-frequency-badge">{frequencyLabel(item.frequency)}</em>
+                            )}
                             {item.instructions && <em className="item-admin-badge"> (com instruções)</em>}
                             {item.children.length > 0 && (
                               <em className="item-admin-badge"> ({item.children.length} sub-itens)</em>
@@ -267,7 +290,8 @@ function AdminSections({ sections, onReload, onClose }) {
                                 setEditingItem({
                                   id: item.id,
                                   label: item.label,
-                                  instructions: instructionsToText(item.instructions)
+                                  instructions: instructionsToText(item.instructions),
+                                  frequency: item.frequency
                                 })
                               }
                             >
@@ -298,6 +322,16 @@ function AdminSections({ sections, onReload, onClose }) {
                                   value={editingItem.instructions}
                                   onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
                                 />
+                                <select
+                                  value={editingItem.frequency}
+                                  onChange={(e) => setEditingItem({ ...editingItem, frequency: e.target.value })}
+                                >
+                                  {FREQUENCY_OPTIONS.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
                                 <div className="section-admin-actions">
                                   <button type="button" className="icon-button" onClick={() => handleSaveItem(child.id)}>
                                     Salvar
@@ -311,6 +345,9 @@ function AdminSections({ sections, onReload, onClose }) {
                               <>
                                 <span>
                                   {child.label}
+                                  {child.frequency !== 'daily' && (
+                                    <em className="item-frequency-badge">{frequencyLabel(child.frequency)}</em>
+                                  )}
                                   {child.instructions && <em className="item-admin-badge"> (com instruções)</em>}
                                 </span>
                                 <div className="section-admin-actions">
@@ -337,7 +374,8 @@ function AdminSections({ sections, onReload, onClose }) {
                                       setEditingItem({
                                         id: child.id,
                                         label: child.label,
-                                        instructions: instructionsToText(child.instructions)
+                                        instructions: instructionsToText(child.instructions),
+                                        frequency: child.frequency
                                       })
                                     }
                                   >
@@ -367,6 +405,16 @@ function AdminSections({ sections, onReload, onClose }) {
                         value={getNewSubItemForm(item.id).instructions}
                         onChange={(e) => setNewSubItemForm(item.id, { instructions: e.target.value })}
                       />
+                      <select
+                        value={getNewSubItemForm(item.id).frequency}
+                        onChange={(e) => setNewSubItemForm(item.id, { frequency: e.target.value })}
+                      >
+                        {FREQUENCY_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="button"
                         className="icon-button"
@@ -391,6 +439,16 @@ function AdminSections({ sections, onReload, onClose }) {
                     value={getNewItemForm(section.id).instructions}
                     onChange={(e) => setNewItemForm(section.id, { instructions: e.target.value })}
                   />
+                  <select
+                    value={getNewItemForm(section.id).frequency}
+                    onChange={(e) => setNewItemForm(section.id, { frequency: e.target.value })}
+                  >
+                    {FREQUENCY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                   <button type="button" className="icon-button" onClick={() => handleAddItem(section.id)}>
                     <Plus size={14} /> Adicionar item
                   </button>

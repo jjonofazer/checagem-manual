@@ -105,6 +105,7 @@ async function init() {
       parent_id INT NULL,
       label VARCHAR(150) NOT NULL,
       instructions TEXT NULL,
+      frequency VARCHAR(10) NOT NULL DEFAULT 'daily',
       position INT NOT NULL DEFAULT 0,
       FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE,
       FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
@@ -123,6 +124,16 @@ async function init() {
     );
   }
 
+  // Bancos criados antes da frequencia (diaria/semanal/mensal) existir precisam do ALTER abaixo
+  const [frequencyCol] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'items' AND COLUMN_NAME = 'frequency'`,
+    [DB_NAME]
+  );
+  if (frequencyCol.length === 0) {
+    await pool.query("ALTER TABLE items ADD COLUMN frequency VARCHAR(10) NOT NULL DEFAULT 'daily'");
+  }
+
   // Esquema antigo de registros usava item_id como texto fixo; a partir de agora
   // itens sao dinamicos (tabela items com id numerico), entao recriamos a tabela.
   const [existingCols] = await pool.query(
@@ -139,11 +150,12 @@ async function init() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       item_id INT NOT NULL,
       date DATE NOT NULL,
+      period_key VARCHAR(20) NOT NULL,
       user_id INT NOT NULL,
       status VARCHAR(10) NOT NULL DEFAULT 'online',
       obs TEXT NULL,
       registered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_item_date (item_id, date),
+      UNIQUE KEY unique_item_period (item_id, period_key),
       FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
@@ -158,6 +170,36 @@ async function init() {
   if (statusCol.length === 0) {
     await pool.query("ALTER TABLE registros ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'online'");
     await pool.query('ALTER TABLE registros ADD COLUMN obs TEXT NULL');
+  }
+
+  // Bancos criados antes de itens semanais/mensais existirem precisam do ALTER abaixo:
+  // troca a chave unica de (item_id, date) para (item_id, period_key), preenchendo o
+  // period_key dos registros existentes (todos diarios ate aqui) com a propria data.
+  const [periodCol] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'registros' AND COLUMN_NAME = 'period_key'`,
+    [DB_NAME]
+  );
+  if (periodCol.length === 0) {
+    await pool.query('ALTER TABLE registros ADD COLUMN period_key VARCHAR(20) NULL');
+    await pool.query("UPDATE registros SET period_key = DATE_FORMAT(date, '%Y-%m-%d') WHERE period_key IS NULL");
+    await pool.query('ALTER TABLE registros MODIFY COLUMN period_key VARCHAR(20) NOT NULL');
+  }
+
+  // A troca de indice precisa criar o novo antes de derrubar o antigo: o
+  // unique_item_date sustenta a foreign key de item_id, entao apagar antes de
+  // ter outro indice cobrindo item_id quebra a FK.
+  const [indexRows] = await pool.query(
+    `SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'registros' AND INDEX_NAME IN ('unique_item_date', 'unique_item_period')`,
+    [DB_NAME]
+  );
+  const indexNames = indexRows.map((row) => row.INDEX_NAME);
+  if (!indexNames.includes('unique_item_period')) {
+    await pool.query('ALTER TABLE registros ADD UNIQUE KEY unique_item_period (item_id, period_key)');
+  }
+  if (indexNames.includes('unique_item_date')) {
+    await pool.query('ALTER TABLE registros DROP INDEX unique_item_date');
   }
 
   const [userRows] = await pool.query('SELECT COUNT(*) AS count FROM users');
