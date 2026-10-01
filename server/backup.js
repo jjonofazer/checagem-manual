@@ -9,6 +9,7 @@ const dotenv = require('dotenv');
 const mysql = require('mysql2');
 const mysqlPromise = require('mysql2/promise');
 const { loadPfx, encryptBuffer } = require('./certCrypto');
+const { registrarLogBackup } = require('./backupLog');
 
 const SERVER_DIR = __dirname;
 dotenv.config({ path: path.join(SERVER_DIR, '.env') });
@@ -58,7 +59,13 @@ function getBackupConfig() {
       process.env.BACKUP_CERT_PATH || process.env.BACKUP_PFX_PATH || process.env.BACKUP_CERT_PFX,
       path.resolve(SERVER_DIR, '..', 'backup-keys', 'backup-checagem.pfx')
     ),
-    pfxPassword: process.env.BACKUP_PFX_PASSWORD || ''
+    pfxPassword: process.env.BACKUP_PFX_PASSWORD || '',
+    // Log JSON lido por outro sistema que envia um relatorio de backups por
+    // e-mail (ver INSTRUCOES-LOG-BACKUP.md). Vazio desativa a gravacao do log.
+    logDir: process.env.BACKUP_LOG_DIR || 'G:\\.shortcut-targets-by-id\\1I5rxcXA115ID7UE6Zcx1yjiRObYcHfll\\BACKUP - LOG',
+    logDispositivo: process.env.BACKUP_LOG_DISPOSITIVO || 'SERVER-09',
+    logSistema: process.env.BACKUP_LOG_SISTEMA || 'CHECAGEM',
+    logTipoBackup: process.env.BACKUP_LOG_TIPO || 'MYSQL Checagem'
   };
 }
 
@@ -261,6 +268,7 @@ async function createEncryptedBackup(reason = 'manual') {
   const backupConfig = getBackupConfig();
   const dbConfig = getDbConfig();
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'checagem-backup-'));
+  const inicio = new Date();
 
   try {
     await fsp.mkdir(backupConfig.outputDir, { recursive: true });
@@ -280,10 +288,37 @@ async function createEncryptedBackup(reason = 'manual') {
 
     await gzipFile(sqlPath, gzPath);
     await encryptFileWithCertificate(gzPath, finalPath, backupConfig);
-    await cleanupOldBackups(backupConfig.outputDir, backupConfig.retentionDays);
 
     console.log(`[backup] Backup criptografado criado: ${finalPath}`);
+
+    // Limpeza de backups antigos fica a parte: uma falha aqui nao significa
+    // que o backup de hoje falhou, entao nao deve virar "Falha no backup" no log.
+    try {
+      await cleanupOldBackups(backupConfig.outputDir, backupConfig.retentionDays);
+    } catch (err) {
+      console.error('[backup] Falha ao limpar backups antigos:', err.message);
+    }
+
+    await registrarLogBackup({
+      inicio,
+      fim: new Date(),
+      sucesso: true,
+      pastaDestino: finalPath,
+      dbNome: dbConfig.database,
+      config: backupConfig
+    });
+
     return finalPath;
+  } catch (err) {
+    await registrarLogBackup({
+      inicio,
+      fim: new Date(),
+      sucesso: false,
+      erro: err.message,
+      dbNome: dbConfig.database,
+      config: backupConfig
+    });
+    throw err;
   } finally {
     backupRunning = false;
     await fsp.rm(tempDir, { recursive: true, force: true });
