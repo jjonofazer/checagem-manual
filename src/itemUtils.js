@@ -8,6 +8,31 @@ export function frequencyLabel(frequency) {
   return FREQUENCY_LABELS[frequency] || null;
 }
 
+// Data em que um item semanal/mensal volta a poder ser marcado de novo (o
+// mesmo calculo de periodo que o backend usa pra period_key, so que aqui so
+// precisamos do inicio do PROXIMO periodo, nao da chave do atual).
+export function nextPeriodReset(frequency) {
+  const now = new Date();
+
+  if (frequency === 'monthly') {
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+
+  if (frequency === 'weekly') {
+    const day = now.getDay(); // 0=domingo ... 6=sabado
+    const daysUntilNextMonday = ((1 - day + 7) % 7) || 7;
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextMonday);
+    return next;
+  }
+
+  return null;
+}
+
+export function formatDateBR(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
 export function flattenLeafItems(items) {
   return items.flatMap((item) =>
     item.children && item.children.length > 0 ? flattenLeafItems(item.children) : [item]

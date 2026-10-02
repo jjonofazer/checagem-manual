@@ -1,5 +1,5 @@
 import React from 'react';
-import { frequencyLabel } from './itemUtils';
+import { frequencyLabel, nextPeriodReset, formatDateBR } from './itemUtils';
 
 function formatRegisteredDate(isoString) {
   if (!isoString) return '';
@@ -13,8 +13,12 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
   const isOnline = registro?.status === 'online';
   const isOffline = registro?.status === 'offline';
   const isNotDaily = item.frequency && item.frequency !== 'daily';
+  // Item semanal/mensal ja verificado fica travado (sem poder clicar) ate o
+  // periodo seguinte comecar - nao e pra dar pra desmarcar nem refazer antes da hora.
+  const isLocked = isNotDaily && !!registro;
 
   const handleOnlineClick = () => {
+    if (isLocked) return;
     if (isOnline) {
       onRemove();
       return;
@@ -27,6 +31,7 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
   };
 
   const handleOfflineClick = () => {
+    if (isLocked) return;
     if (isOffline) {
       onRemove();
       return;
@@ -35,7 +40,11 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
   };
 
   return (
-    <div className={`check-item ${isOnline ? 'checked' : ''} ${isOffline ? 'offline' : ''}`}>
+    <div
+      className={`check-item ${isOnline ? 'checked' : ''} ${isOffline ? 'offline' : ''} ${
+        isLocked ? 'check-item-locked' : ''
+      }`}
+    >
       <div className="check-item-info">
         <span>
           {item.label}
@@ -48,11 +57,17 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
             {isOffline && registro.obs ? ` — Obs: ${registro.obs}` : ''}
           </span>
         )}
+        {isLocked && (
+          <span className="registered-by check-item-locked-note">
+            Concluído — libera de novo em {formatDateBR(nextPeriodReset(item.frequency))}
+          </span>
+        )}
       </div>
       <div className="status-buttons">
         <button
           type="button"
           onClick={handleOnlineClick}
+          disabled={isLocked}
           className={`status-button online ${isOnline ? 'active' : ''}`}
         >
           ONLINE
@@ -60,6 +75,7 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
         <button
           type="button"
           onClick={handleOfflineClick}
+          disabled={isLocked}
           className={`status-button offline ${isOffline ? 'active' : ''}`}
         >
           OFFLINE

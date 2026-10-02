@@ -928,6 +928,35 @@ body {
   color: #b91c1c;
 }
 
+.check-item.check-item-locked {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  box-shadow: none;
+  opacity: 0.85;
+}
+
+.check-item.check-item-locked .check-item-info span {
+  color: #6b7280;
+}
+
+.check-item-locked-note {
+  display: block;
+  font-style: italic;
+  color: #6b7280 !important;
+}
+
+.status-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.status-button.online.active:disabled,
+.status-button.offline.active:disabled {
+  background: #9ca3af;
+  border-color: #9ca3af;
+  color: white;
+}
+
 .check-item-info {
   display: flex;
   flex-direction: column;
