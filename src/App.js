@@ -12,6 +12,8 @@ import ObsModal from './ObsModal';
 import Report from './Report';
 import AdminDashboard from './AdminDashboard';
 import Footer from './Footer';
+import LoadingScreen from './LoadingScreen';
+import CarregandoLogo from './CarregandoLogo';
 import { flattenLeafItems } from './itemUtils';
 import {
   getToken,
@@ -29,6 +31,7 @@ const getCurrentDate = () => new Date().toISOString().split('T')[0];
 
 function App() {
   const [authLoading, setAuthLoading] = useState(true);
+  const [splash, setSplash] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [sections, setSections] = useState([]);
   const [sectionsLoading, setSectionsLoading] = useState(true);
@@ -46,6 +49,13 @@ function App() {
   const allItems = sections.flatMap((section) => flattenLeafItems(section.items));
 
   const today = getCurrentDate();
+
+  // Splash da logo J.A.V. fica visivel por no minimo 3s na abertura, mesmo
+  // que a verificacao de sessao termine antes (ver LOADING/.../LEIA-ME.md)
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 3000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Valida sessão salva ao carregar a página
   useEffect(() => {
@@ -185,18 +195,8 @@ function App() {
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="App">
-        <div className="card">
-          <div className="header">
-            <h1>CHECAGEM MANUAL</h1>
-            <p>Carregando...</p>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
+  if (authLoading || splash) {
+    return <LoadingScreen mensagem="Iniciando sistema" />;
   }
 
   if (!currentUser) {
@@ -251,7 +251,7 @@ function App() {
           <>
             {/* Grid de Seções */}
             {sectionsLoading ? (
-              <p style={{ textAlign: 'center', marginBottom: '2rem' }}>Carregando tópicos...</p>
+              <CarregandoLogo mensagem="Carregando tópicos..." />
             ) : sections.length === 0 ? (
               <p style={{ textAlign: 'center', marginBottom: '2rem' }}>Nenhum tópico cadastrado ainda.</p>
             ) : (

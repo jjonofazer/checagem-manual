@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { CheckCircle2, XCircle, Circle, ChevronDown, ChevronRight, Download } from 'lucide-react';
 import { getRegistros } from './api';
 import ModalOverlay from './ModalOverlay';
+import CarregandoLogo from './CarregandoLogo';
 import { flattenLeafItemsWithLabel, frequencyLabel } from './itemUtils';
 
 const getCurrentDate = () => new Date().toISOString().split('T')[0];
@@ -139,7 +140,7 @@ function Report({ sections, onClose }) {
       {error && <p className="login-error">{error}</p>}
 
       {loading ? (
-        <p style={{ textAlign: 'center' }}>Carregando...</p>
+        <CarregandoLogo mensagem="Carregando relatório..." />
       ) : sections.length === 0 ? (
         <p style={{ textAlign: 'center' }}>Nenhum tópico cadastrado ainda.</p>
       ) : (

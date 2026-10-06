@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exemplo — Logo J.A.V.</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #1e293b; color: #fff; }
+  header { padding: 16px 24px; background: #0f172a; display: flex; gap: 10px; }
+  button { padding: 8px 14px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+  #conteudo { margin: 24px; background: #fff; color: #333; border-radius: 14px; padding: 22px; min-height: 300px; }
+</style>
+</head>
+<body>
+  <header>
+    <button onclick="telaCheia()">Tela cheia (3 s)</button>
+    <button onclick="carregar(2000)">Página lenta (2 s)</button>
+    <button onclick="carregar(150)">Página rápida (150 ms)</button>
+  </header>
+  <div id="conteudo">Clique num botão acima.</div>
+
+  <script src="jav-loading.js"></script>
+  <script>
+    // Simula uma chamada ao backend que demora `ms` milissegundos
+    function falsaApi(ms) { return new Promise(function (ok) { setTimeout(function () { ok('Dados carregados em ' + ms + ' ms'); }, ms); }); }
+
+    function telaCheia() {
+      var tela = JAV.telaCheia('Iniciando sistema');
+      setTimeout(tela.fechar, 3000);
+    }
+
+    function carregar(ms) {
+      var conteudo = document.getElementById('conteudo');
+      JAV.aguardar(conteudo, falsaApi(ms)).then(function (txt) { conteudo.textContent = txt; });
+    }
+
+    telaCheia(); // abertura do sistema
+  </script>
+</body>
+</html>
