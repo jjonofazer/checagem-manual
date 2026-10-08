@@ -3,6 +3,26 @@ import { User, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { login, setToken } from './api';
 import LogoJAV from './LogoJAV';
 
+function MiniWindow({ className, cells = 4 }) {
+  return (
+    <div className={`login-window ${className}`}>
+      <div className="login-window-titlebar">
+        <span className="login-window-dot" />
+        <span className="login-window-dot" />
+        <span className="login-window-dot" />
+      </div>
+      <div className="login-window-body">
+        <span className="login-window-headline" />
+        <div className="login-window-grid">
+          {Array.from({ length: cells }).map((_, i) => (
+            <span key={i} className="login-window-cell" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Login({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -29,22 +49,9 @@ function Login({ onLogin }) {
     <div className="login-split">
       <div className="login-split-left">
         <div className="login-split-decor" aria-hidden="true">
-          <div className="login-window">
-            <div className="login-window-titlebar">
-              <span className="login-window-dot" />
-              <span className="login-window-dot" />
-              <span className="login-window-dot" />
-            </div>
-            <div className="login-window-body">
-              <span className="login-window-headline" />
-              <div className="login-window-grid">
-                <span className="login-window-cell" />
-                <span className="login-window-cell" />
-                <span className="login-window-cell" />
-                <span className="login-window-cell" />
-              </div>
-            </div>
-          </div>
+          <MiniWindow className="login-window-a" cells={4} />
+          <MiniWindow className="login-window-b" cells={2} />
+          <MiniWindow className="login-window-c" cells={6} />
         </div>
         <div className="login-split-brand">
           <h1>Checagem Manual</h1>

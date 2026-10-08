@@ -163,11 +163,13 @@ body {
 .login-split {
   min-height: 100vh;
   display: flex;
+  overflow: hidden;
 }
 
 .login-split-left {
-  flex: 1 1 50%;
+  flex: 1 1 55%;
   position: relative;
+  z-index: 2;
   overflow: hidden;
   display: flex;
   align-items: flex-end;
@@ -176,7 +178,11 @@ body {
     radial-gradient(circle at 12% 10%, rgba(96, 165, 250, 0.28), transparent 45%),
     radial-gradient(circle at 88% 85%, rgba(37, 99, 235, 0.35), transparent 50%),
     linear-gradient(135deg, #04060c 0%, #0a1122 30%, #0f2a5c 65%, #1d4ed8 100%);
-  clip-path: polygon(0 0, 100% 0, 92% 100%, 0 100%);
+  /* seta sutil: cheio em cima e embaixo, recua uns 10% no meio (medido por
+     pixel na referencia do Controle Patrimonial - nao e uma linha reta).
+     o painel branco fica por baixo e precisa se sobrepor (margin-left
+     negativa abaixo) o bastante pra cobrir esse recuo, sem deixar brecha */
+  clip-path: polygon(0 0, 100% 0, 90% 50%, 100% 100%, 0 100%);
 }
 
 .login-split-decor {
@@ -190,15 +196,26 @@ body {
    translucida, em segundo plano no painel azul. */
 .login-window {
   position: absolute;
-  top: 20%;
-  left: 7%;
-  width: 360px;
-  transform: rotate(-5deg);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
+}
+
+.login-window-a { top: 10%; left: 4%; width: 340px; transform: rotate(-5deg); }
+.login-window-b { top: 54%; left: 46%; width: 210px; transform: rotate(4deg); opacity: 0.85; }
+.login-window-c { top: 64%; left: 8%; width: 270px; transform: rotate(3deg); opacity: 0.9; }
+
+.login-window-b .login-window-cell,
+.login-window-c .login-window-cell {
+  height: 1.6rem;
+}
+
+.login-window-b .login-window-body,
+.login-window-c .login-window-body {
+  padding: 0.85rem;
+  gap: 0.55rem;
 }
 
 .login-window-titlebar {
@@ -264,12 +281,15 @@ body {
 }
 
 .login-split-right {
-  flex: 1 1 50%;
+  flex: 1 1 45%;
+  position: relative;
+  z-index: 1;
+  margin-left: -6vw;
   display: flex;
   align-items: center;
   justify-content: center;
   background: white;
-  padding: 2rem;
+  padding: 2rem 2rem 2rem calc(2rem + 6vw);
 }
 
 .login-split-card {
@@ -401,6 +421,8 @@ body {
 
   .login-split-right {
     flex: 1 1 100%;
+    margin-left: 0;
+    padding: 2rem;
   }
 }
 
