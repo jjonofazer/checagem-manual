@@ -233,7 +233,7 @@ function AdminSections({ sections, onReload, onClose }) {
                             rows={3}
                             placeholder="Instruções extras (uma ação por linha). Deixe em branco se não precisar."
                             value={editingItem.instructions}
-                            onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
+                            onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value.toUpperCase() })}
                           />
                           <select
                             value={editingItem.frequency}
@@ -320,7 +320,7 @@ function AdminSections({ sections, onReload, onClose }) {
                                   rows={3}
                                   placeholder="Instruções extras (uma ação por linha). Deixe em branco se não precisar."
                                   value={editingItem.instructions}
-                                  onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value })}
+                                  onChange={(e) => setEditingItem({ ...editingItem, instructions: e.target.value.toUpperCase() })}
                                 />
                                 <select
                                   value={editingItem.frequency}
@@ -403,7 +403,7 @@ function AdminSections({ sections, onReload, onClose }) {
                         rows={2}
                         placeholder="Instruções extras (opcional, uma por linha)"
                         value={getNewSubItemForm(item.id).instructions}
-                        onChange={(e) => setNewSubItemForm(item.id, { instructions: e.target.value })}
+                        onChange={(e) => setNewSubItemForm(item.id, { instructions: e.target.value.toUpperCase() })}
                       />
                       <select
                         value={getNewSubItemForm(item.id).frequency}
@@ -437,7 +437,7 @@ function AdminSections({ sections, onReload, onClose }) {
                     rows={2}
                     placeholder="Instruções extras (opcional, uma por linha)"
                     value={getNewItemForm(section.id).instructions}
-                    onChange={(e) => setNewItemForm(section.id, { instructions: e.target.value })}
+                    onChange={(e) => setNewItemForm(section.id, { instructions: e.target.value.toUpperCase() })}
                   />
                   <select
                     value={getNewItemForm(section.id).frequency}

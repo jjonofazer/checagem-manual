@@ -27,7 +27,7 @@ function ObsModal({ item, onConfirm, onClose }) {
             id="obs"
             rows={4}
             value={obs}
-            onChange={(e) => setObs(e.target.value)}
+            onChange={(e) => setObs(e.target.value.toUpperCase())}
             placeholder="Ex: TV sem sinal HDMI, câmera desconectada, etc."
             autoFocus
           />
