@@ -4,6 +4,8 @@ setlocal enabledelayedexpansion
 set "SERVICO_API=ChecagemManualAPI"
 set "SERVICO_WEB=ChecagemManualWeb"
 set "BASE=%~dp0"
+rem Copia do painel fora da pasta do projeto (ex.: Area de Trabalho) usa o caminho fixo.
+if not exist "%BASE%server\backup.js" set "BASE=C:\checagem-manual\"
 set "BACKEND=%BASE%server"
 set "LOGDIR=%BASE%logs"
 set "BACKUPDIR=%BACKEND%\backups"
@@ -12,6 +14,9 @@ set "PORTA_WEB=6001"
 set "URL_WEB=http://localhost:%PORTA_WEB%"
 set "URL_API=http://localhost:%PORTA_API%/api"
 set "NSSM=nssm"
+set "LOGBACKUPDIR=G:\.shortcut-targets-by-id\1I5rxcXA115ID7UE6Zcx1yjiRObYcHfll\BACKUP - LOG"
+set "LOGBACKUPSISTEMA=CHECAGEM"
+set "LOGBACKUPDISPOSITIVO=SERVER-09"
 
 if exist "C:\nssm\nssm.exe" set "NSSM=C:\nssm\nssm.exe"
 if not exist "%LOGDIR%" mkdir "%LOGDIR%"
@@ -33,6 +38,18 @@ if exist "%BACKEND%\.env" (
 )
 if not exist "%BACKUPDIR%" mkdir "%BACKUPDIR%"
 
+rem Mesmos valores que o backend usa para o log JSON (server\backup.js).
+if exist "%BACKEND%\.env" (
+  for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /i "BACKUP_LOG_DIR= BACKUP_LOG_SISTEMA= BACKUP_LOG_DISPOSITIVO=" "%BACKEND%\.env" 2^>nul`) do (
+    set "VALOR=%%B"
+    if defined VALOR set "VALOR=!VALOR:"=!"
+    if /i "%%A"=="BACKUP_LOG_DIR" if defined VALOR set "LOGBACKUPDIR=!VALOR!"
+    if /i "%%A"=="BACKUP_LOG_SISTEMA" if defined VALOR set "LOGBACKUPSISTEMA=!VALOR!"
+    if /i "%%A"=="BACKUP_LOG_DISPOSITIVO" if defined VALOR set "LOGBACKUPDISPOSITIVO=!VALOR!"
+  )
+)
+set "LOGBACKUPARQ=%LOGBACKUPDIR%\log_Backup_%LOGBACKUPDISPOSITIVO%_%LOGBACKUPSISTEMA%.json"
+
 :menu
 cls
 echo ============================================
@@ -42,6 +59,7 @@ echo   Servico NSSM: %SERVICO_API% (API + interface, porta %PORTA_WEB%)
 echo   Servico %SERVICO_WEB%: desativado (consolidado no servico acima)
 echo   Logs: %LOGDIR%
 echo   Backups: %BACKUPDIR%
+echo   Log do backup: %LOGBACKUPARQ%
 echo.
 echo   1. Iniciar servico
 echo   2. Parar servico
@@ -54,9 +72,10 @@ echo   8. Abrir pasta de logs
 echo   9. Testar portas (netstat)
 echo   10. Abrir sistema no navegador
 echo   11. Abrir API no navegador
-echo   12. Criar backup agora
+echo   12. Criar backup agora (grava log no disco G:)
 echo   13. Abrir pasta de backups
-echo   14. Sair
+echo   14. Ver log do backup no disco G:
+echo   15. Sair
 echo ============================================
 set /p "OPCAO=Escolha uma opcao: "
 
@@ -73,7 +92,8 @@ if "%OPCAO%"=="10" goto navegador
 if "%OPCAO%"=="11" goto api
 if "%OPCAO%"=="12" goto backup
 if "%OPCAO%"=="13" goto pasta_backup
-if "%OPCAO%"=="14" goto fim
+if "%OPCAO%"=="14" goto ver_log_backup
+if "%OPCAO%"=="15" goto fim
 goto menu
 
 :iniciar
@@ -147,11 +167,42 @@ start "" "%URL_API%"
 goto menu
 
 :backup
+if not exist "G:\" (
+  echo ATENCAO: disco G: nao encontrado. Abra o Google Drive antes, senao o log nao sera gravado.
+  echo.
+)
 echo Criando backup criptografado agora...
+for /f %%T in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyyMMddHHmmss')"') do set "INICIO_BACKUP=%%T"
 cd /d "%BACKEND%"
 node "scripts\criarBackup.js"
+echo.
+set "LOG_ATUALIZADO="
+for /f %%T in ('powershell -NoProfile -Command "$f='%LOGBACKUPARQ%'; if (Test-Path -LiteralPath $f) { (Get-Item -LiteralPath $f).LastWriteTime.ToString('yyyyMMddHHmmss') }"') do (
+  if "%%T" GEQ "%INICIO_BACKUP%" set "LOG_ATUALIZADO=1"
+)
+if defined LOG_ATUALIZADO (
+  echo Log gravado no disco G: %LOGBACKUPARQ%
+  call :mostrar_log_backup
+) else (
+  echo ERRO: o log NAO foi atualizado em %LOGBACKUPARQ%
+  echo Confira se o Google Drive esta aberto e o disco G: acessivel.
+)
 pause
 goto menu
+
+:ver_log_backup
+if not exist "%LOGBACKUPARQ%" (
+  echo Log nao encontrado: %LOGBACKUPARQ%
+  pause
+  goto menu
+)
+call :mostrar_log_backup
+pause
+goto menu
+
+:mostrar_log_backup
+powershell -NoProfile -Command "Get-Content -LiteralPath '%LOGBACKUPARQ%' -Encoding utf8"
+exit /b 0
 
 :pasta_backup
 start "" "%BACKUPDIR%"
