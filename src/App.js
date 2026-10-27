@@ -86,6 +86,7 @@ function App() {
             username: r.username,
             status: r.status,
             obs: r.obs,
+            date: r.date,
             registeredAt: r.registered_at
           };
         });
@@ -132,6 +133,7 @@ function App() {
           username: registro.username,
           status: registro.status,
           obs: registro.obs,
+          date: registro.date,
           registeredAt: registro.registered_at
         }
       }));

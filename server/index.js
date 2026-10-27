@@ -4,7 +4,7 @@ const cors = require('cors');
 const { init, getPool } = require('./db');
 const { hashPassword, verifyPassword, generateToken } = require('./auth');
 const { startBackupScheduler } = require('./backup');
-const { sanitizeFrequency, getPeriodKey, isoWeekKey, monthKey } = require('./periodUtils');
+const { sanitizeFrequency, getPeriodKey, isoWeekKey } = require('./periodUtils');
 
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 
@@ -447,6 +447,20 @@ async function getItemFrequency(pool, itemId) {
   return item ? item.frequency : null;
 }
 
+// Registro mensal "ativo" numa data: marcado ate essa data e ha menos de 1 mes.
+// Espera dois parametros (a mesma data duas vezes).
+const MONTHLY_ACTIVE_SQL = 'r.date <= ? AND DATE_ADD(r.date, INTERVAL 1 MONTH) > ?';
+
+async function findActiveMonthly(pool, itemId, date) {
+  const [[row]] = await pool.query(
+    `SELECT r.period_key FROM registros r
+     WHERE r.item_id = ? AND ${MONTHLY_ACTIVE_SQL}
+     ORDER BY r.date DESC LIMIT 1`,
+    [itemId, date, date]
+  );
+  return row ? row.period_key : null;
+}
+
 app.get(
   '/api/registros',
   authMiddleware,
@@ -455,14 +469,14 @@ app.get(
     if (!date) return res.status(400).json({ error: 'Parametro date e obrigatorio' });
 
     const [rows] = await getPool().query(
-      `SELECT r.item_id, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
+      `SELECT r.item_id, r.date, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
        FROM registros r
        JOIN items i ON i.id = r.item_id
        JOIN users u ON u.id = r.user_id
        WHERE (i.frequency = 'daily' AND r.period_key = ?)
           OR (i.frequency = 'weekly' AND r.period_key = ?)
-          OR (i.frequency = 'monthly' AND r.period_key = ?)`,
-      [date, isoWeekKey(date), monthKey(date)]
+          OR (i.frequency = 'monthly' AND ${MONTHLY_ACTIVE_SQL})`,
+      [date, isoWeekKey(date), date, date]
     );
 
     res.json({ registros: rows });
@@ -486,7 +500,8 @@ app.post(
     const pool = getPool();
     const frequency = await getItemFrequency(pool, itemId);
     if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
-    const periodKey = getPeriodKey(date, frequency);
+    const periodKey =
+      (frequency === 'monthly' && (await findActiveMonthly(pool, itemId, date))) || getPeriodKey(date, frequency);
 
     await pool.query(
       `INSERT INTO registros (item_id, date, period_key, user_id, status, obs)
@@ -496,7 +511,7 @@ app.post(
     );
 
     const [rows] = await pool.query(
-      `SELECT r.item_id, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
+      `SELECT r.item_id, r.date, r.status, r.obs, r.registered_at, u.id AS user_id, u.name AS user_name, u.username
        FROM registros r JOIN users u ON u.id = r.user_id
        WHERE r.item_id = ? AND r.period_key = ?`,
       [itemId, periodKey]
@@ -518,10 +533,11 @@ app.delete(
     const frequency = await getItemFrequency(pool, itemId);
     if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
 
-    await pool.query('DELETE FROM registros WHERE item_id = ? AND period_key = ?', [
-      itemId,
-      getPeriodKey(date, frequency)
-    ]);
+    const periodKey =
+      frequency === 'monthly' ? await findActiveMonthly(pool, itemId, date) : getPeriodKey(date, frequency);
+    if (periodKey) {
+      await pool.query('DELETE FROM registros WHERE item_id = ? AND period_key = ?', [itemId, periodKey]);
+    }
     res.json({ ok: true });
   })
 );
@@ -570,9 +586,9 @@ app.get(
          JOIN items i ON i.id = r.item_id
          WHERE (i.frequency = 'daily' AND r.period_key = ?)
             OR (i.frequency = 'weekly' AND r.period_key = ?)
-            OR (i.frequency = 'monthly' AND r.period_key = ?)
+            OR (i.frequency = 'monthly' AND ${MONTHLY_ACTIVE_SQL})
          GROUP BY r.status`,
-        [dateStr, isoWeekKey(dateStr), monthKey(dateStr)]
+        [dateStr, isoWeekKey(dateStr), dateStr, dateStr]
       );
 
       const entry = { online: 0, offline: 0 };

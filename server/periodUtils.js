@@ -26,9 +26,13 @@ function sanitizeFrequency(value) {
   return FREQUENCIES.includes(value) ? value : 'daily';
 }
 
+// Mensal nao e mais "mes do calendario": vale 1 mes a partir da data em que foi
+// marcado (25/09 -> libera 25/10). Cada registro mensal tem period_key propria
+// ("M" + data, pra nao colidir com as chaves diarias) e a validade e resolvida
+// pela coluna date nas queries (ver MONTHLY_ACTIVE_SQL no index.js).
 function getPeriodKey(dateStr, frequency) {
   if (frequency === 'weekly') return isoWeekKey(dateStr);
-  if (frequency === 'monthly') return monthKey(dateStr);
+  if (frequency === 'monthly') return `M${dateStr}`;
   return dateStr;
 }
 

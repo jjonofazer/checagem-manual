@@ -16,6 +16,7 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
   // Item semanal/mensal ja verificado fica travado (sem poder clicar) ate o
   // periodo seguinte comecar - nao e pra dar pra desmarcar nem refazer antes da hora.
   const isLocked = isNotDaily && !!registro;
+  const nextReset = isLocked ? nextPeriodReset(item.frequency, registro.date) : null;
 
   const handleOnlineClick = () => {
     if (isLocked) return;
@@ -53,13 +54,15 @@ function ItemRow({ item, registro, onSetOnline, onRequestOffline, onOpenInstruct
         {registro && (
           <span className={`registered-by ${isOffline ? 'registered-offline' : ''}`}>
             {isOffline ? 'OFFLINE' : 'ONLINE'} · {registro.name}
-            {isNotDaily && registro.registeredAt ? ` — em ${formatRegisteredDate(registro.registeredAt)}` : ''}
+            {isNotDaily && (registro.date || registro.registeredAt)
+              ? ` — em ${formatRegisteredDate(registro.date || registro.registeredAt)}`
+              : ''}
             {isOffline && registro.obs ? ` — Obs: ${registro.obs}` : ''}
           </span>
         )}
-        {isLocked && (
+        {isLocked && nextReset && (
           <span className="registered-by check-item-locked-note">
-            Concluído — libera de novo em {formatDateBR(nextPeriodReset(item.frequency))}
+            Concluído — libera de novo em {formatDateBR(nextReset)}
           </span>
         )}
       </div>

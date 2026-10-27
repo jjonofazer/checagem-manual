@@ -8,14 +8,18 @@ export function frequencyLabel(frequency) {
   return FREQUENCY_LABELS[frequency] || null;
 }
 
-// Data em que um item semanal/mensal volta a poder ser marcado de novo (o
-// mesmo calculo de periodo que o backend usa pra period_key, so que aqui so
-// precisamos do inicio do PROXIMO periodo, nao da chave do atual).
-export function nextPeriodReset(frequency) {
+// Data em que um item semanal/mensal volta a poder ser marcado de novo.
+// Semanal: proxima segunda (semana ISO, igual ao backend). Mensal: 1 mes apos a
+// data do ultimo registro (YYYY-MM-DD), com o mesmo ajuste de fim de mes do
+// DATE_ADD(..., INTERVAL 1 MONTH) do MySQL (31/01 -> 28/02).
+export function nextPeriodReset(frequency, lastDate) {
   const now = new Date();
 
   if (frequency === 'monthly') {
-    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    if (!lastDate) return null;
+    const [year, month, day] = lastDate.slice(0, 10).split('-').map(Number);
+    const lastDayOfNextMonth = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(day, lastDayOfNextMonth));
   }
 
   if (frequency === 'weekly') {
