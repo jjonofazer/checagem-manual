@@ -117,6 +117,7 @@ async function init() {
       label VARCHAR(150) NOT NULL,
       instructions TEXT NULL,
       frequency VARCHAR(10) NOT NULL DEFAULT 'daily',
+      monthly_day TINYINT NOT NULL DEFAULT 1,
       position INT NOT NULL DEFAULT 0,
       FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE,
       FOREIGN KEY (parent_id) REFERENCES items(id) ON DELETE CASCADE
@@ -143,6 +144,16 @@ async function init() {
   );
   if (frequencyCol.length === 0) {
     await pool.query("ALTER TABLE items ADD COLUMN frequency VARCHAR(10) NOT NULL DEFAULT 'daily'");
+  }
+
+  // Bancos criados antes do dia fixo de vencimento mensal existir precisam do ALTER abaixo
+  const [monthlyDayCol] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'items' AND COLUMN_NAME = 'monthly_day'`,
+    [DB_NAME]
+  );
+  if (monthlyDayCol.length === 0) {
+    await pool.query('ALTER TABLE items ADD COLUMN monthly_day TINYINT NOT NULL DEFAULT 1');
   }
 
   // Esquema antigo de registros usava item_id como texto fixo; a partir de agora

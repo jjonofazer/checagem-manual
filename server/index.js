@@ -4,7 +4,7 @@ const cors = require('cors');
 const { init, getPool } = require('./db');
 const { hashPassword, verifyPassword, generateToken } = require('./auth');
 const { startBackupScheduler } = require('./backup');
-const { sanitizeFrequency, getPeriodKey, isoWeekKey } = require('./periodUtils');
+const { sanitizeFrequency, sanitizeMonthlyDay, getPeriodKey, isoWeekKey } = require('./periodUtils');
 
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 
@@ -256,7 +256,7 @@ app.get(
     const pool = getPool();
     const [sectionRows] = await pool.query('SELECT id, title, position FROM sections ORDER BY position, id');
     const [itemRows] = await pool.query(
-      'SELECT id, section_id, parent_id, label, instructions, frequency, position FROM items ORDER BY position, id'
+      'SELECT id, section_id, parent_id, label, instructions, frequency, monthly_day, position FROM items ORDER BY position, id'
     );
 
     const toItem = (item) => ({
@@ -264,6 +264,7 @@ app.get(
       label: item.label,
       instructions: parseInstructions(item.instructions),
       frequency: item.frequency,
+      monthlyDay: item.monthly_day,
       children: itemRows.filter((child) => child.parent_id === item.id).map(toItem)
     });
 
@@ -346,7 +347,7 @@ app.post(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const { sectionId, parentId, label, instructions, frequency } = req.body || {};
+    const { sectionId, parentId, label, instructions, frequency, monthlyDay } = req.body || {};
     if (!sectionId || !label || !label.trim()) {
       return res.status(400).json({ error: 'Secao e nome do item sao obrigatorios' });
     }
@@ -354,6 +355,7 @@ app.post(
     const pool = getPool();
     const safeParentId = parentId || null;
     const safeFrequency = sanitizeFrequency(frequency);
+    const safeMonthlyDay = sanitizeMonthlyDay(monthlyDay);
 
     if (safeParentId) {
       const [[parent]] = await pool.query('SELECT id, section_id, parent_id FROM items WHERE id = ?', [safeParentId]);
@@ -366,9 +368,18 @@ app.post(
     }
 
     const [result] = await pool.query(
-      `INSERT INTO items (section_id, parent_id, label, instructions, frequency, position)
-       SELECT ?, ?, ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ? AND parent_id <=> ?`,
-      [sectionId, safeParentId, label.trim(), sanitizeInstructions(instructions), safeFrequency, sectionId, safeParentId]
+      `INSERT INTO items (section_id, parent_id, label, instructions, frequency, monthly_day, position)
+       SELECT ?, ?, ?, ?, ?, ?, COALESCE(MAX(position), -1) + 1 FROM items WHERE section_id = ? AND parent_id <=> ?`,
+      [
+        sectionId,
+        safeParentId,
+        label.trim(),
+        sanitizeInstructions(instructions),
+        safeFrequency,
+        safeMonthlyDay,
+        sectionId,
+        safeParentId
+      ]
     );
     res.status(201).json({
       item: {
@@ -376,6 +387,7 @@ app.post(
         label: label.trim(),
         instructions: sanitizeInstructions(instructions) ? instructions : null,
         frequency: safeFrequency,
+        monthlyDay: safeMonthlyDay,
         children: []
       }
     });
@@ -387,13 +399,14 @@ app.put(
   authMiddleware,
   adminOnly,
   wrap(async (req, res) => {
-    const { label, instructions, frequency } = req.body || {};
+    const { label, instructions, frequency, monthlyDay } = req.body || {};
     if (!label || !label.trim()) return res.status(400).json({ error: 'Nome do item e obrigatorio' });
 
-    await getPool().query('UPDATE items SET label = ?, instructions = ?, frequency = ? WHERE id = ?', [
+    await getPool().query('UPDATE items SET label = ?, instructions = ?, frequency = ?, monthly_day = ? WHERE id = ?', [
       label.trim(),
       sanitizeInstructions(instructions),
       sanitizeFrequency(frequency),
+      sanitizeMonthlyDay(monthlyDay),
       req.params.id
     ]);
     res.json({ ok: true });
@@ -441,25 +454,19 @@ app.post(
 // Itens semanais/mensais continuam "verificados" pelo resto do periodo, mesmo
 // registrados em outro dia dentro dele; por isso o registro e buscado/gravado
 // pela period_key do item (diaria = a propria data, semanal = semana ISO,
-// mensal = ano-mes), nao pela data exata em que foi marcado.
-async function getItemFrequency(pool, itemId) {
-  const [[item]] = await pool.query('SELECT frequency FROM items WHERE id = ?', [itemId]);
-  return item ? item.frequency : null;
+// mensal = "M" + ano-mes em que o ciclo do dia fixo de vencimento do item fecha),
+// nao pela data exata em que foi marcado.
+async function getItemFreqInfo(pool, itemId) {
+  const [[item]] = await pool.query('SELECT frequency, monthly_day FROM items WHERE id = ?', [itemId]);
+  return item ? { frequency: item.frequency, monthlyDay: item.monthly_day } : null;
 }
 
-// Registro mensal "ativo" numa data: marcado ate essa data e ha menos de 1 mes.
-// Espera dois parametros (a mesma data duas vezes).
-const MONTHLY_ACTIVE_SQL = 'r.date <= ? AND DATE_ADD(r.date, INTERVAL 1 MONTH) > ?';
-
-async function findActiveMonthly(pool, itemId, date) {
-  const [[row]] = await pool.query(
-    `SELECT r.period_key FROM registros r
-     WHERE r.item_id = ? AND ${MONTHLY_ACTIVE_SQL}
-     ORDER BY r.date DESC LIMIT 1`,
-    [itemId, date, date]
-  );
-  return row ? row.period_key : null;
-}
+// Pra um item mensal com vencimento no dia i.monthly_day, o period_key do
+// ciclo que contem a data "?" e "M" + ano-mes em que esse ciclo fecha: o
+// proprio mes se o dia da data for <= monthly_day, senao o mes seguinte.
+// Precisa do mesmo parametro de data duas vezes (uma pra DATE_ADD, outra pro DAYOFMONTH).
+const MONTHLY_PERIOD_SQL =
+  "r.period_key = CONCAT('M', DATE_FORMAT(DATE_ADD(?, INTERVAL (DAYOFMONTH(?) > i.monthly_day) MONTH), '%Y-%m'))";
 
 app.get(
   '/api/registros',
@@ -475,7 +482,7 @@ app.get(
        JOIN users u ON u.id = r.user_id
        WHERE (i.frequency = 'daily' AND r.period_key = ?)
           OR (i.frequency = 'weekly' AND r.period_key = ?)
-          OR (i.frequency = 'monthly' AND ${MONTHLY_ACTIVE_SQL})`,
+          OR (i.frequency = 'monthly' AND ${MONTHLY_PERIOD_SQL})`,
       [date, isoWeekKey(date), date, date]
     );
 
@@ -498,10 +505,9 @@ app.post(
     const safeObs = safeStatus === 'offline' ? obs.trim() : null;
 
     const pool = getPool();
-    const frequency = await getItemFrequency(pool, itemId);
-    if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
-    const periodKey =
-      (frequency === 'monthly' && (await findActiveMonthly(pool, itemId, date))) || getPeriodKey(date, frequency);
+    const freqInfo = await getItemFreqInfo(pool, itemId);
+    if (!freqInfo) return res.status(400).json({ error: 'Item nao encontrado' });
+    const periodKey = getPeriodKey(date, freqInfo.frequency, freqInfo.monthlyDay);
 
     await pool.query(
       `INSERT INTO registros (item_id, date, period_key, user_id, status, obs)
@@ -530,14 +536,11 @@ app.delete(
     if (!date) return res.status(400).json({ error: 'Parametro date e obrigatorio' });
 
     const pool = getPool();
-    const frequency = await getItemFrequency(pool, itemId);
-    if (!frequency) return res.status(400).json({ error: 'Item nao encontrado' });
+    const freqInfo = await getItemFreqInfo(pool, itemId);
+    if (!freqInfo) return res.status(400).json({ error: 'Item nao encontrado' });
 
-    const periodKey =
-      frequency === 'monthly' ? await findActiveMonthly(pool, itemId, date) : getPeriodKey(date, frequency);
-    if (periodKey) {
-      await pool.query('DELETE FROM registros WHERE item_id = ? AND period_key = ?', [itemId, periodKey]);
-    }
+    const periodKey = getPeriodKey(date, freqInfo.frequency, freqInfo.monthlyDay);
+    await pool.query('DELETE FROM registros WHERE item_id = ? AND period_key = ?', [itemId, periodKey]);
     res.json({ ok: true });
   })
 );
@@ -586,7 +589,7 @@ app.get(
          JOIN items i ON i.id = r.item_id
          WHERE (i.frequency = 'daily' AND r.period_key = ?)
             OR (i.frequency = 'weekly' AND r.period_key = ?)
-            OR (i.frequency = 'monthly' AND ${MONTHLY_ACTIVE_SQL})
+            OR (i.frequency = 'monthly' AND ${MONTHLY_PERIOD_SQL})
          GROUP BY r.status`,
         [dateStr, isoWeekKey(dateStr), dateStr, dateStr]
       );

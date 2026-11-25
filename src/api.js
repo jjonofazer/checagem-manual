@@ -72,17 +72,17 @@ export function moveSection(id, direction) {
   return request(`/sections/${id}/move`, { method: 'POST', body: JSON.stringify({ direction }) });
 }
 
-export function createItem({ sectionId, parentId, label, instructions, frequency }) {
+export function createItem({ sectionId, parentId, label, instructions, frequency, monthlyDay }) {
   return request('/items', {
     method: 'POST',
-    body: JSON.stringify({ sectionId, parentId, label, instructions, frequency })
+    body: JSON.stringify({ sectionId, parentId, label, instructions, frequency, monthlyDay })
   });
 }
 
-export function updateItem(id, { label, instructions, frequency }) {
+export function updateItem(id, { label, instructions, frequency, monthlyDay }) {
   return request(`/items/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ label, instructions, frequency })
+    body: JSON.stringify({ label, instructions, frequency, monthlyDay })
   });
 }
 

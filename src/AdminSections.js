@@ -19,6 +19,20 @@ const FREQUENCY_OPTIONS = [
   { value: 'monthly', label: 'Mensal' }
 ];
 
+function MonthlyDayField({ value, onChange }) {
+  return (
+    <input
+      type="number"
+      min={1}
+      max={31}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder="Dia do mês (1-31)"
+      title="Dia do mês em que este item mensal vence"
+    />
+  );
+}
+
 function instructionsToText(instructions) {
   return Array.isArray(instructions) ? instructions.join('\n') : '';
 }
@@ -75,7 +89,8 @@ function AdminSections({ sections, onReload, onClose }) {
     runAction(() => deleteSection(id));
   };
 
-  const getNewItemForm = (sectionId) => newItemForms[sectionId] || { label: '', instructions: '', frequency: 'daily' };
+  const getNewItemForm = (sectionId) =>
+    newItemForms[sectionId] || { label: '', instructions: '', frequency: 'daily', monthlyDay: 1 };
 
   const setNewItemForm = (sectionId, patch) => {
     setNewItemForms((prev) => ({ ...prev, [sectionId]: { ...getNewItemForm(sectionId), ...patch } }));
@@ -89,13 +104,18 @@ function AdminSections({ sections, onReload, onClose }) {
         sectionId,
         label: form.label.trim(),
         instructions: textToInstructions(form.instructions),
-        frequency: form.frequency
+        frequency: form.frequency,
+        monthlyDay: form.monthlyDay
       });
-      setNewItemForms((prev) => ({ ...prev, [sectionId]: { label: '', instructions: '', frequency: 'daily' } }));
+      setNewItemForms((prev) => ({
+        ...prev,
+        [sectionId]: { label: '', instructions: '', frequency: 'daily', monthlyDay: 1 }
+      }));
     });
   };
 
-  const getNewSubItemForm = (itemId) => newSubItemForms[itemId] || { label: '', instructions: '', frequency: 'daily' };
+  const getNewSubItemForm = (itemId) =>
+    newSubItemForms[itemId] || { label: '', instructions: '', frequency: 'daily', monthlyDay: 1 };
 
   const setNewSubItemForm = (itemId, patch) => {
     setNewSubItemForms((prev) => ({ ...prev, [itemId]: { ...getNewSubItemForm(itemId), ...patch } }));
@@ -110,9 +130,13 @@ function AdminSections({ sections, onReload, onClose }) {
         parentId,
         label: form.label.trim(),
         instructions: textToInstructions(form.instructions),
-        frequency: form.frequency
+        frequency: form.frequency,
+        monthlyDay: form.monthlyDay
       });
-      setNewSubItemForms((prev) => ({ ...prev, [parentId]: { label: '', instructions: '', frequency: 'daily' } }));
+      setNewSubItemForms((prev) => ({
+        ...prev,
+        [parentId]: { label: '', instructions: '', frequency: 'daily', monthlyDay: 1 }
+      }));
     });
   };
 
@@ -121,7 +145,8 @@ function AdminSections({ sections, onReload, onClose }) {
       await updateItem(id, {
         label: editingItem.label,
         instructions: textToInstructions(editingItem.instructions),
-        frequency: editingItem.frequency
+        frequency: editingItem.frequency,
+        monthlyDay: editingItem.monthlyDay
       });
       setEditingItem(null);
     });
@@ -245,6 +270,12 @@ function AdminSections({ sections, onReload, onClose }) {
                               </option>
                             ))}
                           </select>
+                          {editingItem.frequency === 'monthly' && (
+                            <MonthlyDayField
+                              value={editingItem.monthlyDay}
+                              onChange={(v) => setEditingItem({ ...editingItem, monthlyDay: v })}
+                            />
+                          )}
                           <div className="section-admin-actions">
                             <button type="button" className="icon-button" onClick={() => handleSaveItem(item.id)}>
                               Salvar
@@ -259,7 +290,10 @@ function AdminSections({ sections, onReload, onClose }) {
                           <span>
                             {item.label}
                             {item.frequency !== 'daily' && (
-                              <em className="item-frequency-badge">{frequencyLabel(item.frequency)}</em>
+                              <em className="item-frequency-badge">
+                                {frequencyLabel(item.frequency)}
+                                {item.frequency === 'monthly' ? ` (dia ${item.monthlyDay})` : ''}
+                              </em>
                             )}
                             {item.instructions && <em className="item-admin-badge"> (com instruções)</em>}
                             {item.children.length > 0 && (
@@ -291,7 +325,8 @@ function AdminSections({ sections, onReload, onClose }) {
                                   id: item.id,
                                   label: item.label,
                                   instructions: instructionsToText(item.instructions),
-                                  frequency: item.frequency
+                                  frequency: item.frequency,
+                                  monthlyDay: item.monthlyDay
                                 })
                               }
                             >
@@ -332,6 +367,12 @@ function AdminSections({ sections, onReload, onClose }) {
                                     </option>
                                   ))}
                                 </select>
+                                {editingItem.frequency === 'monthly' && (
+                                  <MonthlyDayField
+                                    value={editingItem.monthlyDay}
+                                    onChange={(v) => setEditingItem({ ...editingItem, monthlyDay: v })}
+                                  />
+                                )}
                                 <div className="section-admin-actions">
                                   <button type="button" className="icon-button" onClick={() => handleSaveItem(child.id)}>
                                     Salvar
@@ -346,7 +387,10 @@ function AdminSections({ sections, onReload, onClose }) {
                                 <span>
                                   {child.label}
                                   {child.frequency !== 'daily' && (
-                                    <em className="item-frequency-badge">{frequencyLabel(child.frequency)}</em>
+                                    <em className="item-frequency-badge">
+                                      {frequencyLabel(child.frequency)}
+                                      {child.frequency === 'monthly' ? ` (dia ${child.monthlyDay})` : ''}
+                                    </em>
                                   )}
                                   {child.instructions && <em className="item-admin-badge"> (com instruções)</em>}
                                 </span>
@@ -375,7 +419,8 @@ function AdminSections({ sections, onReload, onClose }) {
                                         id: child.id,
                                         label: child.label,
                                         instructions: instructionsToText(child.instructions),
-                                        frequency: child.frequency
+                                        frequency: child.frequency,
+                                        monthlyDay: child.monthlyDay
                                       })
                                     }
                                   >
@@ -415,6 +460,12 @@ function AdminSections({ sections, onReload, onClose }) {
                           </option>
                         ))}
                       </select>
+                      {getNewSubItemForm(item.id).frequency === 'monthly' && (
+                        <MonthlyDayField
+                          value={getNewSubItemForm(item.id).monthlyDay}
+                          onChange={(v) => setNewSubItemForm(item.id, { monthlyDay: v })}
+                        />
+                      )}
                       <button
                         type="button"
                         className="icon-button"
@@ -449,6 +500,12 @@ function AdminSections({ sections, onReload, onClose }) {
                       </option>
                     ))}
                   </select>
+                  {getNewItemForm(section.id).frequency === 'monthly' && (
+                    <MonthlyDayField
+                      value={getNewItemForm(section.id).monthlyDay}
+                      onChange={(v) => setNewItemForm(section.id, { monthlyDay: v })}
+                    />
+                  )}
                   <button type="button" className="icon-button" onClick={() => handleAddItem(section.id)}>
                     <Plus size={14} /> Adicionar item
                   </button>

@@ -8,18 +8,21 @@ export function frequencyLabel(frequency) {
   return FREQUENCY_LABELS[frequency] || null;
 }
 
-// Data em que um item semanal/mensal volta a poder ser marcado de novo.
-// Semanal: proxima segunda (semana ISO, igual ao backend). Mensal: 1 mes apos a
-// data do ultimo registro (YYYY-MM-DD), com o mesmo ajuste de fim de mes do
-// DATE_ADD(..., INTERVAL 1 MONTH) do MySQL (31/01 -> 28/02).
-export function nextPeriodReset(frequency, lastDate) {
+// Data em que um item semanal/mensal volta a poder ser marcado de novo. So e
+// chamada quando o item ja esta travado (satisfeito no periodo atual), entao
+// o resultado precisa ser sempre no futuro - se hoje for exatamente o dia do
+// vencimento, o proximo vencimento e no mes seguinte, nao hoje de novo.
+// Semanal: proxima segunda (semana ISO, igual ao backend). Mensal: dia fixo de
+// vencimento do proprio item (ex: todo dia 25), com o mesmo ajuste de fim de
+// mes do backend (dia 31 num mes de 30 dias cai no ultimo dia daquele mes).
+export function nextPeriodReset(frequency, monthlyDay) {
   const now = new Date();
 
   if (frequency === 'monthly') {
-    if (!lastDate) return null;
-    const [year, month, day] = lastDate.slice(0, 10).split('-').map(Number);
-    const lastDayOfNextMonth = new Date(year, month + 1, 0).getDate();
-    return new Date(year, month, Math.min(day, lastDayOfNextMonth));
+    const day = monthlyDay || 1;
+    const targetMonth = now.getDate() >= day ? now.getMonth() + 1 : now.getMonth();
+    const lastDayOfTargetMonth = new Date(now.getFullYear(), targetMonth + 1, 0).getDate();
+    return new Date(now.getFullYear(), targetMonth, Math.min(day, lastDayOfTargetMonth));
   }
 
   if (frequency === 'weekly') {

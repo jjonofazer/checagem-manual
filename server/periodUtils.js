@@ -26,14 +26,44 @@ function sanitizeFrequency(value) {
   return FREQUENCIES.includes(value) ? value : 'daily';
 }
 
-// Mensal nao e mais "mes do calendario": vale 1 mes a partir da data em que foi
-// marcado (25/09 -> libera 25/10). Cada registro mensal tem period_key propria
-// ("M" + data, pra nao colidir com as chaves diarias) e a validade e resolvida
-// pela coluna date nas queries (ver MONTHLY_ACTIVE_SQL no index.js).
-function getPeriodKey(dateStr, frequency) {
+function sanitizeMonthlyDay(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 31 ? n : 1;
+}
+
+// Mensal agora tem um dia fixo de vencimento por item (ex: todo dia 25). O
+// "ciclo" vai do dia seguinte ao vencimento ate o proximo vencimento: marcado
+// ate o dia configurado, conta pro ciclo que fecha nesse mes; marcado depois,
+// ja conta pro ciclo do mes seguinte. Por isso o period_key e nomeado pelo
+// ano-mes em que o ciclo FECHA (ex: "M2026-11" pra um vencimento dia 25/11).
+function monthlyPeriodKey(dateStr, monthlyDay) {
+  const [year, month, day] = dateStr.split('-').map(Number); // month: 1-12
+  const day_ = sanitizeMonthlyDay(monthlyDay);
+
+  let targetYear = year;
+  let targetMonth = month; // ainda 1-12 aqui
+  if (day > day_) {
+    targetMonth += 1;
+    if (targetMonth > 12) {
+      targetMonth = 1;
+      targetYear += 1;
+    }
+  }
+
+  return `M${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+}
+
+function getPeriodKey(dateStr, frequency, monthlyDay) {
   if (frequency === 'weekly') return isoWeekKey(dateStr);
-  if (frequency === 'monthly') return `M${dateStr}`;
+  if (frequency === 'monthly') return monthlyPeriodKey(dateStr, monthlyDay);
   return dateStr;
 }
 
-module.exports = { FREQUENCIES, sanitizeFrequency, getPeriodKey, isoWeekKey, monthKey };
+module.exports = {
+  FREQUENCIES,
+  sanitizeFrequency,
+  sanitizeMonthlyDay,
+  getPeriodKey,
+  isoWeekKey,
+  monthKey
+};
